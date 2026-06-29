@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import Toggle from "@/components/Toggle";
 import { XIcon, PlusIcon } from "@/components/icons";
@@ -9,7 +10,8 @@ import {
   notifications as seedNotifications,
   SUGGESTED_INTERESTS,
 } from "@/lib/mock-data";
-import { useUser } from "@/lib/user-store";
+import { supabase } from "@/lib/supabase/client";
+import { useSession, useProfile, refreshProfile } from "@/lib/supabase/use-session";
 
 const stats = [
   { label: "Outings", value: 24 },
@@ -25,9 +27,44 @@ const prefMeta = [
 ] as const;
 
 export default function ProfilePage() {
-  const { interests, addInterest, removeInterest } = useUser();
+  const router = useRouter();
+  const session = useSession();
+  const { profile } = useProfile();
+  const interests = profile?.interests ?? [];
   const [editingInterests, setEditingInterests] = useState(false);
   const [newInterest, setNewInterest] = useState("");
+
+  async function persistInterests(next: string[]) {
+    if (!profile) return;
+    await supabase.from("profiles").update({ interests: next }).eq("id", profile.id);
+    await refreshProfile();
+  }
+  async function addInterest(label: string) {
+    const v = label.trim();
+    if (!v || interests.some((i) => i.toLowerCase() === v.toLowerCase())) return;
+    await persistInterests([...interests, v]);
+  }
+  async function removeInterest(label: string) {
+    await persistInterests(interests.filter((i) => i !== label));
+  }
+
+  const meta = session?.user?.user_metadata ?? {};
+  const email = session?.user?.email ?? null;
+  const displayName =
+    profile?.name ||
+    (meta.full_name as string) ||
+    (meta.name as string) ||
+    email?.split("@")[0] ||
+    currentUser.name;
+
+  async function handleAuth() {
+    if (session) {
+      await supabase.auth.signOut();
+      router.replace("/login");
+    } else {
+      router.push("/login");
+    }
+  }
 
   const [notifs, setNotifs] = useState(seedNotifications);
   const [prefs, setPrefs] = useState<Record<string, boolean>>({
@@ -60,8 +97,11 @@ export default function ProfilePage() {
             </div>
             <button className="btn-secondary mb-1 h-9 px-4 text-sm">Edit profile</button>
           </div>
-          <h1 className="mt-3 text-2xl font-bold">{currentUser.name}</h1>
-          <p className="text-sm text-on-surface-variant">📍 {currentUser.city}</p>
+          <h1 className="mt-3 text-2xl font-bold">{displayName}</h1>
+          {profile?.username && (
+            <p className="text-sm font-semibold text-primary">@{profile.username}</p>
+          )}
+          <p className="mt-0.5 text-[13px] text-outline">{email ?? "Not signed in"}</p>
         </div>
       </header>
 
@@ -79,18 +119,21 @@ export default function ProfilePage() {
       <section className="px-5 pt-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Interests</h2>
-          <button
-            className="text-sm font-semibold text-primary"
-            onClick={() => setEditingInterests((v) => !v)}
-          >
-            {editingInterests ? "Done" : "Edit"}
-          </button>
+          {profile && (
+            <button
+              className="text-sm font-semibold text-primary"
+              onClick={() => setEditingInterests((v) => !v)}
+            >
+              {editingInterests ? "Done" : "Edit"}
+            </button>
+          )}
         </div>
 
         {interests.length === 0 ? (
           <p className="mt-2 text-sm text-on-surface-variant">
-            No interests yet — tap Edit to add some. They help the AI plan better
-            outings for you.
+            {profile
+              ? "No interests yet — tap Edit to add some. They help the AI plan better outings for you."
+              : "Sign in to add your interests."}
           </p>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -222,9 +265,21 @@ export default function ProfilePage() {
       </section>
 
       <div className="px-5 pt-6">
-        <button className="w-full rounded-full bg-error-container py-3 text-sm font-semibold text-on-error-container transition active:scale-[0.99]">
-          Sign out
-        </button>
+        {session ? (
+          <button
+            onClick={handleAuth}
+            className="w-full rounded-full bg-error-container py-3 text-sm font-semibold text-on-error-container transition active:scale-[0.99]"
+          >
+            Sign out
+          </button>
+        ) : (
+          <button
+            onClick={handleAuth}
+            className="btn-primary h-12 w-full text-base"
+          >
+            Sign in
+          </button>
+        )}
       </div>
     </div>
   );

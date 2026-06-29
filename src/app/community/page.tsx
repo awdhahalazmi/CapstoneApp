@@ -2,7 +2,7 @@ import Avatar from "@/components/Avatar";
 import AiFab from "@/components/AiFab";
 import FriendsRow from "@/components/FriendsRow";
 import { MenuIcon, PinIcon, PingIcon } from "@/components/icons";
-import { friends, feed, currentUser, onlineCount } from "@/lib/mock-data";
+import { friends, feed, currentUser } from "@/lib/mock-data";
 
 const friendById = Object.fromEntries(friends.map((f) => [f.id, f]));
 
@@ -18,15 +18,8 @@ export default function CommunityPage() {
         <Avatar initials={currentUser.initials} gradient={currentUser.gradient} size="sm" />
       </header>
 
-      {/* Friends Online */}
+      {/* Friends — real friendships from Supabase */}
       <section className="px-5 pt-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Friends Online</h2>
-          <span className="rounded-full bg-primary-fixed px-3 py-1 text-[12px] font-semibold text-on-primary-fixed-variant">
-            {onlineCount} Live
-          </span>
-        </div>
-
         <FriendsRow />
       </section>
 

@@ -106,26 +106,26 @@
       transition active:scale-[0.98];
   }
 
-  /* Smart chips for filtering */
+  /* Material 3 filter chip — outlined when unselected, tonal when selected */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full bg-surface-low px-3.5 py-2
-      text-[13px] font-semibold text-on-surface-variant transition
-      whitespace-nowrap;
+    @apply inline-flex items-center gap-1.5 rounded-[8px] border border-outline-variant
+      bg-transparent px-4 py-2 text-[13px] font-medium text-on-surface-variant
+      transition whitespace-nowrap;
   }
   .chip-active {
-    @apply bg-primary text-on-primary;
+    @apply border-transparent bg-secondary-container text-on-secondary-container;
   }
 
-  /* Soft gray input — violet border on focus */
+  /* Material 3 outlined text field */
   .input {
-    @apply w-full rounded-md border border-transparent bg-surface-low px-4 py-3
-      text-[15px] text-on-surface placeholder:text-outline outline-none
-      transition focus:border-primary focus:bg-card;
+    @apply w-full rounded-md border border-outline-variant bg-transparent px-4 py-3
+      text-[15px] text-on-surface placeholder:text-on-surface-variant outline-none
+      transition focus:border-primary focus:ring-1 focus:ring-primary;
   }
 
-  /* Floating AI assistant button */
+  /* Material 3 FAB — 16dp rounded square, primary-tinted with a tonal glow */
   .fab {
-    @apply grid h-14 w-14 place-items-center rounded-full text-on-primary
+    @apply grid h-14 w-14 place-items-center rounded-2xl text-on-primary
       shadow-float transition active:scale-95;
     background: linear-gradient(135deg, #7c3aed 0%, #630ed4 100%);
   }

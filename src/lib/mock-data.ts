@@ -21,25 +21,28 @@ export const currentUser = {
   interests: ["Coffee", "Rooftops", "Brunch", "Live music"],
 };
 
-/** Suggested interests for the profile picker. */
-export const SUGGESTED_INTERESTS = [
-  "Coffee",
-  "Rooftops",
-  "Brunch",
-  "Live music",
-  "Hiking",
-  "Beaches",
-  "Art galleries",
-  "Gaming",
-  "Football",
-  "Padel",
-  "Foodie",
-  "Shopping",
-  "Movies",
-  "Board games",
-  "Photography",
-  "Desert camping",
+/** Interest options for the signup picker + profile editor (emoji = fun & visual). */
+export const INTEREST_OPTIONS = [
+  { label: "Coffee", emoji: "☕" },
+  { label: "Rooftops", emoji: "🌆" },
+  { label: "Brunch", emoji: "🥞" },
+  { label: "Live music", emoji: "🎵" },
+  { label: "Hiking", emoji: "🥾" },
+  { label: "Beaches", emoji: "🏖️" },
+  { label: "Art", emoji: "🎨" },
+  { label: "Gaming", emoji: "🎮" },
+  { label: "Football", emoji: "⚽" },
+  { label: "Padel", emoji: "🎾" },
+  { label: "Foodie", emoji: "🍔" },
+  { label: "Shopping", emoji: "🛍️" },
+  { label: "Movies", emoji: "🎬" },
+  { label: "Photography", emoji: "📸" },
+  { label: "Desert camping", emoji: "🏕️" },
+  { label: "Board games", emoji: "🎲" },
 ];
+
+/** Plain labels (used by the profile editor's suggestion list). */
+export const SUGGESTED_INTERESTS = INTEREST_OPTIONS.map((o) => o.label);
 
 export const friends: Friend[] = [
   { id: "alex", name: "Alex", initials: "AL", gradient: "from-indigo-500 to-violet-600", online: true, tagline: "Always down for rooftops" },
