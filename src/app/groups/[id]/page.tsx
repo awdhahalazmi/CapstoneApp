@@ -10,6 +10,7 @@ import {
   GlobeIcon,
   LockIcon,
   CalendarIcon,
+  PinIcon,
 } from "@/components/icons";
 import { friends } from "@/lib/mock-data";
 import { useGroups } from "@/lib/groups-store";
@@ -105,6 +106,23 @@ export default function GroupViewPage() {
 
       {/* Activity */}
       <p className="px-5 pt-3 text-sm text-on-surface-variant">{group.lastActivity}</p>
+
+      {/* Shared map */}
+      <Link
+        href={`/groups/${group.id}/map`}
+        className="mx-5 mt-4 flex items-center gap-3 overflow-hidden rounded-lg bg-card p-4 shadow-soft transition active:scale-[0.99]"
+      >
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-gradient-to-br from-primary to-primary-container text-on-primary">
+          <PinIcon className="h-6 w-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold">Group map</p>
+          <p className="text-[13px] text-on-surface-variant">
+            Drop pins, save places & vote together
+          </p>
+        </div>
+        <span className="text-on-surface-variant">›</span>
+      </Link>
 
       {/* Members */}
       <section className="px-5 pt-6">

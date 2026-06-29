@@ -4,14 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { AiIcon, SendIcon } from "@/components/icons";
 import { initialChat, assistantReply, friends } from "@/lib/mock-data";
 import { useGroups } from "@/lib/groups-store";
-import { useUser } from "@/lib/user-store";
+import { useProfile } from "@/lib/supabase/use-session";
+import { supabase } from "@/lib/supabase/client";
 import type { ChatMessage } from "@/lib/types";
 
 const friendById = Object.fromEntries(friends.map((f) => [f.id, f]));
 
 export default function AiPage() {
   const { groups } = useGroups();
-  const { interests } = useUser();
+  const { profile } = useProfile();
+  const interests = profile?.interests ?? [];
 
   const [messages, setMessages] = useState<ChatMessage[]>(initialChat);
   const [input, setInput] = useState("");
@@ -35,25 +37,34 @@ export default function AiPage() {
       }
     : null;
 
-  function send(text: string) {
+  async function send(text: string) {
     const content = text.trim();
     if (!content || thinking) return;
 
     const userMsg: ChatMessage = { id: `u${idRef.current++}`, role: "user", content };
+    const history = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setThinking(true);
 
-    // Mock latency + context-aware canned reply. Swap for an OpenRouter stream later.
-    window.setTimeout(() => {
-      const reply: ChatMessage = {
-        id: `a${idRef.current++}`,
-        role: "assistant",
-        content: assistantReply({ prompt: content, group: groupContext, interests }),
-      };
-      setMessages((m) => [...m, reply]);
-      setThinking(false);
-    }, 700);
+    let replyText = "";
+    try {
+      // Real AI via the Supabase `ai-chat` edge function (OpenRouter key stays server-side).
+      const { data, error } = await supabase.functions.invoke("ai-chat", {
+        body: { messages: history, group: groupContext, interests },
+      });
+      if (error || !data?.reply) throw error ?? new Error("no reply");
+      replyText = data.reply as string;
+    } catch {
+      // Fallback: signed-out users, or the OpenRouter key isn't set yet.
+      replyText = assistantReply({ prompt: content, group: groupContext, interests });
+    }
+
+    setMessages((m) => [
+      ...m,
+      { id: `a${idRef.current++}`, role: "assistant", content: replyText },
+    ]);
+    setThinking(false);
   }
 
   const suggestions = selectedGroup
