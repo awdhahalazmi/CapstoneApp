@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
+import "@maptiler/sdk/dist/maptiler-sdk.css";
 import BottomNav from "@/components/BottomNav";
 import SideNav from "@/components/SideNav";
 import AuthRedirector from "@/components/AuthRedirector";
