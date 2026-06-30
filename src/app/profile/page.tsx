@@ -2,37 +2,80 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Avatar from "@/components/Avatar";
-import Toggle from "@/components/Toggle";
 import { XIcon, PlusIcon } from "@/components/icons";
-import {
-  currentUser,
-  notifications as seedNotifications,
-  SUGGESTED_INTERESTS,
-} from "@/lib/mock-data";
+import { SUGGESTED_INTERESTS } from "@/lib/mock-data";
+import { avatarFor } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase/client";
 import { useSession, useProfile, refreshProfile } from "@/lib/supabase/use-session";
+import { useGroups } from "@/lib/groups-store";
+import { useFriends } from "@/lib/friends-store";
 
-const stats = [
-  { label: "Outings", value: 24 },
-  { label: "Places", value: 18 },
-  { label: "Friends", value: 7 },
-];
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-const prefMeta = [
-  { key: "pings", label: "Pings nearby", desc: "When a friend is close by" },
-  { key: "plans", label: "Plan invites", desc: "When you're invited to an outing" },
-  { key: "recs", label: "AI recommendations", desc: "New picks for your groups" },
-  { key: "reminders", label: "Booking reminders", desc: "Before a planned outing" },
-] as const;
+const INTEREST_EMOJIS: Record<string, string> = {
+  Coffee: "☕", Rooftops: "🌆", Brunch: "🥞", "Live music": "🎵",
+  Hiking: "🥾", Beaches: "🏖️", Art: "🎨", Foodie: "🍽️",
+  Nightlife: "🌙", Shopping: "🛍️", Sports: "⚽", Gaming: "🎮",
+  Chill: "🌊", "Hidden Gems": "💎",
+};
+
+function SettingsIcon() {
+  return (
+    <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function SignOutIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
 
 export default function ProfilePage() {
   const router = useRouter();
   const session = useSession();
   const { profile } = useProfile();
+  const { groups } = useGroups();
+  const { friends } = useFriends();
   const interests = profile?.interests ?? [];
+
+  const stats = [
+    { label: "Places", value: 0 },
+    { label: "Friends", value: friends.length },
+    { label: "Groups", value: groups.length },
+  ];
+
   const [editingInterests, setEditingInterests] = useState(false);
   const [newInterest, setNewInterest] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [eName, setEName] = useState("");
+  const [eUsername, setEUsername] = useState("");
+  const [eEmail, setEEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+
+  const meta = session?.user?.user_metadata ?? {};
+  const email = session?.user?.email ?? null;
+  const displayName =
+    profile?.name ||
+    (meta.full_name as string) ||
+    (meta.name as string) ||
+    email?.split("@")[0] ||
+    "Me";
+  const av = avatarFor({ id: profile?.id, name: profile?.name, username: profile?.username });
+
+  const suggestions = SUGGESTED_INTERESTS.filter(
+    (s) => !interests.some((i) => i.toLowerCase() === s.toLowerCase()),
+  );
 
   async function persistInterests(next: string[]) {
     if (!profile) return;
@@ -47,240 +90,224 @@ export default function ProfilePage() {
   async function removeInterest(label: string) {
     await persistInterests(interests.filter((i) => i !== label));
   }
-
-  const meta = session?.user?.user_metadata ?? {};
-  const email = session?.user?.email ?? null;
-  const displayName =
-    profile?.name ||
-    (meta.full_name as string) ||
-    (meta.name as string) ||
-    email?.split("@")[0] ||
-    currentUser.name;
-
-  async function handleAuth() {
-    if (session) {
-      await supabase.auth.signOut();
-      router.replace("/login");
-    } else {
-      router.push("/login");
-    }
-  }
-
-  const [notifs, setNotifs] = useState(seedNotifications);
-  const [prefs, setPrefs] = useState<Record<string, boolean>>({
-    pings: true,
-    plans: true,
-    recs: true,
-    reminders: false,
-  });
-
-  const unread = notifs.filter((n) => !n.read).length;
-  const suggestions = SUGGESTED_INTERESTS.filter(
-    (s) => !interests.some((i) => i.toLowerCase() === s.toLowerCase()),
-  );
-
   function submitInterest(e: React.FormEvent) {
     e.preventDefault();
     addInterest(newInterest);
     setNewInterest("");
   }
 
+  function openEdit() {
+    setEName(profile?.name ?? "");
+    setEUsername(profile?.username ?? "");
+    setEEmail(email ?? "");
+    setEditError(null);
+    setEditing(true);
+  }
+
+  async function saveProfile() {
+    if (!profile) return;
+    const name = eName.trim();
+    const uname = eUsername.trim().toLowerCase();
+    if (name.length < 1) return setEditError("Name is required.");
+    if (!USERNAME_RE.test(uname)) return setEditError("Username must be 3–20 chars (a–z, 0–9, _).");
+    setSaving(true);
+    setEditError(null);
+    if (uname !== profile.username) {
+      const { data } = await supabase.rpc("username_available", { p_username: uname });
+      if (data !== true) { setSaving(false); return setEditError("That username is taken."); }
+    }
+    const { error: upErr } = await supabase.from("profiles").update({ name, username: uname }).eq("id", profile.id);
+    if (upErr) {
+      setSaving(false);
+      return setEditError(upErr.code === "23505" ? "That username is taken." : upErr.message);
+    }
+    const newEmail = eEmail.trim();
+    if (newEmail && newEmail !== email) {
+      const { error: emErr } = await supabase.auth.updateUser({ email: newEmail });
+      if (emErr) { setSaving(false); return setEditError(emErr.message); }
+      setNotice(`Confirmation sent to ${newEmail} — click the link to finish.`);
+    }
+    await refreshProfile();
+    setSaving(false);
+    setEditing(false);
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+  }
+
   return (
-    <div className="pb-24">
-      {/* Banner + identity */}
-      <header className="relative">
-        <div className="h-32 bg-gradient-to-br from-primary to-primary-container" />
-        <div className="px-5">
-          <div className="-mt-10 flex items-end justify-between">
-            <div className="rounded-full ring-4 ring-surface">
-              <Avatar initials={currentUser.initials} gradient={currentUser.gradient} size="lg" />
+    <div className="flex h-full flex-col bg-surface">
+      <div className="no-scrollbar flex-1 overflow-y-auto pb-24">
+
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-2">
+          <h1 className="text-xl font-bold text-primary">Profile</h1>
+          <button onClick={openEdit} className="text-on-surface-variant transition active:scale-90">
+            <SettingsIcon />
+          </button>
+        </div>
+
+        {/* Avatar + name */}
+        <div className="flex flex-col items-center px-5 pt-4 pb-2">
+          {/* Avatar with violet ring */}
+          <div className="rounded-full p-[3px] bg-gradient-to-br from-primary to-primary-container shadow-[0_10px_25px_rgba(124,58,237,0.25)]">
+            <div className={`h-24 w-24 rounded-full bg-gradient-to-br ${av.gradient} grid place-items-center text-2xl font-bold text-white ring-2 ring-surface`}>
+              {av.initials}
             </div>
-            <button className="btn-secondary mb-1 h-9 px-4 text-sm">Edit profile</button>
           </div>
-          <h1 className="mt-3 text-2xl font-bold">{displayName}</h1>
+
+          <h2 className="mt-4 text-2xl font-bold text-on-surface">{displayName}</h2>
+
+          {/* Badge */}
           {profile?.username && (
-            <p className="text-sm font-semibold text-primary">@{profile.username}</p>
-          )}
-          <p className="mt-0.5 text-[13px] text-outline">{email ?? "Not signed in"}</p>
-        </div>
-      </header>
-
-      {/* Stats */}
-      <div className="mx-5 mt-4 grid grid-cols-3 divide-x divide-outline-variant/40 rounded-lg bg-card py-3 shadow-soft">
-        {stats.map((s) => (
-          <div key={s.label} className="text-center">
-            <p className="text-xl font-bold">{s.value}</p>
-            <p className="text-[12px] text-on-surface-variant">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Interests */}
-      <section className="px-5 pt-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Interests</h2>
-          {profile && (
-            <button
-              className="text-sm font-semibold text-primary"
-              onClick={() => setEditingInterests((v) => !v)}
-            >
-              {editingInterests ? "Done" : "Edit"}
-            </button>
+            <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-primary-fixed px-3 py-1 text-[13px] font-semibold text-on-primary-fixed-variant">
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="currentColor" className="text-primary">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
+              </svg>
+              @{profile.username}
+            </span>
           )}
         </div>
 
-        {interests.length === 0 ? (
-          <p className="mt-2 text-sm text-on-surface-variant">
-            {profile
-              ? "No interests yet — tap Edit to add some. They help the AI plan better outings for you."
-              : "Sign in to add your interests."}
-          </p>
-        ) : (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {interests.map((interest) => (
-              <span
-                key={interest}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-fixed px-3 py-1.5 text-[13px] font-semibold text-on-primary-fixed-variant"
-              >
-                {interest}
-                {editingInterests && (
-                  <button
-                    onClick={() => removeInterest(interest)}
-                    aria-label={`Remove ${interest}`}
-                    className="-mr-1 grid h-4 w-4 place-items-center rounded-full bg-on-primary-fixed-variant/15"
-                  >
-                    <XIcon className="h-3 w-3" />
-                  </button>
-                )}
-              </span>
-            ))}
+        {/* Edit profile form */}
+        {editing && (
+          <div className="mx-5 mt-2 rounded-2xl bg-card p-4 shadow-soft space-y-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Name</label>
+              <input value={eName} onChange={(e) => setEName(e.target.value)} className="input mt-1" placeholder="Full name" />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Username</label>
+              <div className="relative mt-1">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 font-semibold text-outline">@</span>
+                <input value={eUsername} onChange={(e) => setEUsername(e.target.value)} className="input pl-8" placeholder="username" maxLength={20} autoCapitalize="none" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Email</label>
+              <input type="email" value={eEmail} onChange={(e) => setEEmail(e.target.value)} className="input mt-1" placeholder="you@email.com" />
+            </div>
+            {editError && <p className="rounded-xl bg-error-container px-3 py-2 text-sm text-on-error-container">{editError}</p>}
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setEditing(false)} className="btn-secondary h-11 flex-1">Cancel</button>
+              <button onClick={saveProfile} disabled={saving} className="btn-primary h-11 flex-1 disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
+            </div>
           </div>
         )}
 
-        {editingInterests && (
-          <div className="mt-4">
-            {/* Add a custom interest */}
-            <form onSubmit={submitInterest} className="flex items-center gap-2">
-              <input
-                value={newInterest}
-                onChange={(e) => setNewInterest(e.target.value)}
-                className="input"
-                placeholder="Add an interest…"
-                maxLength={24}
-              />
-              <button
-                type="submit"
-                disabled={!newInterest.trim()}
-                className="btn-primary h-12 shrink-0 px-4 text-sm disabled:opacity-40"
-              >
-                Add
-              </button>
-            </form>
-
-            {/* Suggestions */}
-            {suggestions.length > 0 && (
-              <>
-                <p className="mt-4 text-[12px] font-semibold uppercase tracking-wide text-on-surface-variant">
-                  Suggestions
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => addInterest(s)}
-                      className="inline-flex items-center gap-1 rounded-full bg-surface-low px-3 py-1.5 text-[13px] font-semibold text-on-surface-variant transition active:scale-95"
-                    >
-                      <PlusIcon className="h-3.5 w-3.5" />
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+        {notice && (
+          <p className="mx-5 mt-3 rounded-xl bg-tertiary-container/20 px-3 py-2 text-sm text-tertiary">{notice}</p>
         )}
-      </section>
 
-      {/* Notifications */}
-      <section className="px-5 pt-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">
-            Notifications{" "}
-            {unread > 0 && (
-              <span className="ml-1 rounded-full bg-error px-2 py-0.5 text-[11px] font-bold text-on-error align-middle">
-                {unread}
-              </span>
-            )}
-          </h2>
-          {unread > 0 && (
-            <button
-              className="text-sm font-semibold text-primary"
-              onClick={() => setNotifs((ns) => ns.map((n) => ({ ...n, read: true })))}
-            >
-              Mark all read
-            </button>
-          )}
-        </div>
-
-        <div className="mt-3 divide-y divide-outline-variant/30 overflow-hidden rounded-lg bg-card shadow-soft">
-          {notifs.map((n) => (
-            <button
-              key={n.id}
-              onClick={() =>
-                setNotifs((ns) => ns.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
-              }
-              className="flex w-full items-start gap-3 p-3.5 text-left transition active:bg-surface-low"
-            >
-              <span
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? "bg-transparent" : "bg-primary"}`}
-              />
-              <div className="min-w-0 flex-1">
-                <p className={`text-sm ${n.read ? "text-on-surface-variant" : "font-medium text-on-surface"}`}>
-                  {n.message}
-                </p>
-                <p className="mt-0.5 text-[12px] text-outline">{n.time}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Notification preferences */}
-      <section className="px-5 pt-6">
-        <h2 className="text-lg font-bold">Notification preferences</h2>
-        <div className="mt-3 divide-y divide-outline-variant/30 overflow-hidden rounded-lg bg-card shadow-soft">
-          {prefMeta.map((p) => (
-            <div key={p.key} className="flex items-center justify-between p-3.5">
-              <div>
-                <p className="text-sm font-medium">{p.label}</p>
-                <p className="text-[12px] text-on-surface-variant">{p.desc}</p>
-              </div>
-              <Toggle
-                on={prefs[p.key]}
-                onChange={() => setPrefs((s) => ({ ...s, [p.key]: !s[p.key] }))}
-              />
+        {/* Stats */}
+        <div className="mx-5 mt-5 grid grid-cols-3 divide-x divide-outline-variant/40 rounded-2xl bg-surface-low py-4">
+          {stats.map((s) => (
+            <div key={s.label} className="text-center">
+              <p className="text-xl font-bold text-on-surface">{s.value}</p>
+              <p className="mt-0.5 text-[12px] font-medium text-on-surface-variant">{s.label}</p>
             </div>
           ))}
         </div>
-      </section>
 
-      <div className="px-5 pt-6">
-        {session ? (
-          <button
-            onClick={handleAuth}
-            className="w-full rounded-full bg-error-container py-3 text-sm font-semibold text-on-error-container transition active:scale-[0.99]"
-          >
-            Sign out
-          </button>
-        ) : (
-          <button
-            onClick={handleAuth}
-            className="btn-primary h-12 w-full text-base"
-          >
-            Sign in
-          </button>
-        )}
+        {/* Interests */}
+        <section className="mt-6 px-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-bold text-on-surface">Interests</h3>
+            {profile && (
+              <button onClick={() => setEditingInterests((v) => !v)} className="text-[13px] font-semibold text-primary">
+                {editingInterests ? "Done" : "Edit"}
+              </button>
+            )}
+          </div>
+
+          {interests.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">No interests yet — tap Edit to add some.</p>
+          ) : (
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+              {interests.map((interest, i) => {
+                const emoji = INTEREST_EMOJIS[interest];
+                const isFirst = i === 0;
+                return (
+                  <span
+                    key={interest}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold ${
+                      isFirst
+                        ? "bg-primary text-on-primary"
+                        : "bg-surface-low text-on-surface-variant"
+                    }`}
+                  >
+                    {emoji && <span aria-hidden>{emoji}</span>}
+                    {interest}
+                    {editingInterests && (
+                      <button onClick={() => removeInterest(interest)} aria-label={`Remove ${interest}`}
+                        className="grid h-4 w-4 place-items-center rounded-full bg-white/20">
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {editingInterests && (
+            <div className="mt-4 space-y-3">
+              <form onSubmit={submitInterest} className="flex gap-2">
+                <input value={newInterest} onChange={(e) => setNewInterest(e.target.value)} className="input flex-1" placeholder="Add an interest…" maxLength={24} />
+                <button type="submit" disabled={!newInterest.trim()} className="btn-primary h-12 shrink-0 px-4 text-sm disabled:opacity-40">Add</button>
+              </form>
+              {suggestions.length > 0 && (
+                <>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">Suggestions</p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.map((s) => (
+                      <button key={s} onClick={() => addInterest(s)}
+                        className="inline-flex items-center gap-1 rounded-full bg-surface-low px-3 py-1.5 text-[13px] font-semibold text-on-surface-variant transition active:scale-95">
+                        <PlusIcon className="h-3.5 w-3.5" />
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Sign out row */}
+        <div className="mx-5 mt-6">
+          {session ? (
+            <button
+              onClick={() => setConfirmSignOut(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-card py-4 text-[15px] font-semibold text-error shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition active:scale-[0.99]"
+            >
+              <SignOutIcon />
+              Sign Out
+            </button>
+          ) : (
+            <button onClick={() => router.push("/login")} className="btn-primary h-[52px] w-full text-base">Sign in</button>
+          )}
+        </div>
       </div>
+
+      {/* Sign-out confirmation */}
+      {confirmSignOut && (
+        <>
+          <button aria-label="Close" onClick={() => setConfirmSignOut(false)} className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" />
+          <div className="fixed inset-x-5 top-1/2 z-50 mx-auto max-w-sm -translate-y-1/2 rounded-2xl bg-card p-6 shadow-[0px_10px_25px_rgba(124,58,237,0.18)]">
+            <h3 className="text-lg font-bold">Sign out?</h3>
+            <p className="mt-1 text-sm text-on-surface-variant">You'll need to sign in again to access your account.</p>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setConfirmSignOut(false)} className="btn-secondary h-11 flex-1">Cancel</button>
+              <button onClick={signOut} className="inline-flex h-11 flex-1 items-center justify-center rounded-full bg-error text-[15px] font-semibold text-on-error transition active:scale-[0.98]">
+                Sign out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

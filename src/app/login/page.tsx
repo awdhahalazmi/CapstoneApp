@@ -73,7 +73,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (mode !== "signup" || step !== 2 || !usernameValid) return;
     const t = window.setTimeout(async () => {
-      const { data } = await supabase.rpc("username_available", { name: username });
+      const { data } = await supabase.rpc("username_available", { p_username: username });
       setUCheck({ name: username, available: data === true });
     }, 400);
     return () => window.clearTimeout(t);

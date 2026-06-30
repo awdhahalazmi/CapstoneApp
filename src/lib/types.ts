@@ -46,14 +46,19 @@ export type Place = {
   aiReason?: string;
 };
 
+export type GroupMember = {
+  id: string; // profile id
+  name: string;
+  username: string | null;
+};
+
 export type Group = {
   id: string;
   name: string;
   emoji: string;
-  memberIds: string[];
-  lastActivity: string;
-  nextPlan?: string;
-  isPublic?: boolean;
+  isPublic: boolean;
+  ownerId: string;
+  members: GroupMember[];
 };
 
 export type ChatMessage = {

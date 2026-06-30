@@ -2,7 +2,6 @@ import type {
   Friend,
   FeedItem,
   Place,
-  Group,
   ChatMessage,
   AppNotification,
 } from "./types";
@@ -134,35 +133,6 @@ export const places: Place[] = [
     tags: ["Seafood", "Group", "Lively"],
     imageGradient: "from-sky-500 to-indigo-700",
     aiReason: "Big tables for groups and a mix of cuisines so everyone finds something.",
-  },
-];
-
-export const groups: Group[] = [
-  {
-    id: "g1",
-    name: "The Usual Crew",
-    emoji: "🎉",
-    memberIds: ["alex", "jordan", "maya", "sam"],
-    lastActivity: "Maya planned an outing · 2h ago",
-    nextPlan: "Al Shaheed Park · Tomorrow 4 PM",
-    isPublic: false,
-  },
-  {
-    id: "g2",
-    name: "Coffee Club",
-    emoji: "☕",
-    memberIds: ["jordan", "tara", "noor"],
-    lastActivity: "Noor shared Beans & Books · Yesterday",
-    isPublic: false,
-  },
-  {
-    id: "g3",
-    name: "Weekend Explorers",
-    emoji: "🧭",
-    memberIds: ["sam", "yousef", "alex", "noor", "maya"],
-    lastActivity: "3 new place suggestions · 3d ago",
-    nextPlan: "Vote on Friday's spot",
-    isPublic: true,
   },
 ];
 

@@ -4,11 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, useProfile } from "@/lib/supabase/use-session";
 
-/*
-  Lightweight client gate. If a signed-in user hasn't chosen a username yet,
-  send them to /onboarding. Signed-out users are left alone (demo mode), so the
-  app stays browsable until full login gating is turned on.
-*/
+const PUBLIC_PATHS = ["/login", "/onboarding"];
 
 export default function AuthRedirector() {
   const session = useSession();
@@ -17,8 +13,14 @@ export default function AuthRedirector() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loaded || !session) return;
-    if (!profile?.username && pathname !== "/onboarding" && pathname !== "/login") {
+    if (!loaded) return;
+
+    if (!session) {
+      if (!PUBLIC_PATHS.includes(pathname)) router.replace("/login");
+      return;
+    }
+
+    if (!profile?.username && !PUBLIC_PATHS.includes(pathname)) {
       router.replace("/onboarding");
     }
   }, [loaded, session, profile, pathname, router]);
