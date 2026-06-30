@@ -1,144 +1,125 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
-import {
-  ArrowLeftIcon,
-  SearchIcon,
-  UserPlusIcon,
-  CheckIcon,
-  XIcon,
-} from "@/components/icons";
+import { ArrowLeftIcon, SearchIcon, UserPlusIcon, CheckIcon, XIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase/client";
 import { useSession } from "@/lib/supabase/use-session";
+import { avatarFor } from "@/lib/avatar";
 
-type PublicProfile = {
-  id: string;
-  username: string | null;
-  name: string;
-  avatar_url?: string | null;
-};
-
-const GRADIENTS = [
-  "from-indigo-500 to-violet-600",
-  "from-rose-400 to-pink-600",
-  "from-amber-400 to-orange-600",
-  "from-emerald-400 to-teal-600",
-  "from-sky-400 to-blue-600",
-  "from-fuchsia-400 to-purple-600",
-  "from-cyan-400 to-sky-600",
-];
-
-function avatarFor(p: PublicProfile) {
-  const seed = p.username || p.name || p.id;
-  let h = 0;
-  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const base = (p.name || p.username || "?").trim();
-  const initials = base.includes(" ")
-    ? base.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()
-    : base.slice(0, 2).toUpperCase();
-  return { gradient: GRADIENTS[h % GRADIENTS.length], initials };
-}
+type Profile = { id: string; username: string | null; name: string };
+type FriendRow = { user_id: string; friend_id: string; status: string; other: Profile };
 
 export default function FriendsPage() {
   const session = useSession();
+  const uid = session?.user?.id ?? null;
 
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<PublicProfile[]>([]);
-  const [friends, setFriends] = useState<PublicProfile[]>([]);
-  const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
+  // friendships where I am involved (either side)
+  const [rows, setRows] = useState<FriendRow[]>([]);
 
   const q = query.trim().toLowerCase();
-  const searching = q.length >= 2;
 
-  // Load my current friends
-  useEffect(() => {
-    if (!session) return;
-    let active = true;
-    (async () => {
-      const { data } = await supabase
-        .from("friendships")
-        .select("friend:profiles!friendships_friend_id_fkey(id, username, name)")
-        .eq("user_id", session.user.id);
-      if (!active) return;
-      const list = (data ?? [])
-        .map((r) => r.friend as unknown as PublicProfile)
-        .filter(Boolean);
-      setFriends(list);
-      setFriendIds(new Set(list.map((f) => f.id)));
-    })();
-    return () => {
-      active = false;
-    };
-  }, [session]);
+  const loadRows = useCallback(async () => {
+    if (!uid) return;
+    // Rows where I sent the invite
+    const { data: sent } = await supabase
+      .from("friendships")
+      .select("user_id, friend_id, status, other:profiles!friendships_friend_id_fkey(id, name, username)")
+      .eq("user_id", uid);
+    // Rows where I received the invite
+    const { data: recv } = await supabase
+      .from("friendships")
+      .select("user_id, friend_id, status, other:profiles!friendships_user_id_fkey(id, name, username)")
+      .eq("friend_id", uid);
 
-  // Debounced username search
+    const mapped: FriendRow[] = [
+      ...(sent ?? []).map((r) => ({ user_id: r.user_id, friend_id: r.friend_id, status: r.status, other: r.other as unknown as Profile })),
+      ...(recv ?? []).map((r) => ({ user_id: r.user_id, friend_id: r.friend_id, status: r.status, other: r.other as unknown as Profile })),
+    ].filter((r) => r.other);
+    setRows(mapped);
+  }, [uid]);
+
+  useEffect(() => { loadRows(); }, [loadRows]);
+
+  // Debounced search
   useEffect(() => {
-    if (!session || !searching) return;
-    const t = window.setTimeout(async () => {
+    if (!uid || q.length < 2) { setSearchResults([]); return; }
+    const t = setTimeout(async () => {
       const { data } = await supabase
         .from("profiles")
         .select("id, username, name")
-        .neq("id", session.user.id)
+        .neq("id", uid)
         .not("username", "is", null)
         .ilike("username", `%${q}%`)
         .limit(12);
-      setResults((data as PublicProfile[]) ?? []);
+      setSearchResults((data as Profile[]) ?? []);
     }, 350);
-    return () => window.clearTimeout(t);
-  }, [q, searching, session]);
+    return () => clearTimeout(t);
+  }, [q, uid]);
 
-  async function addFriend(p: PublicProfile) {
-    if (!session) return;
-    const { error } = await supabase
-      .from("friendships")
-      .insert({ user_id: session.user.id, friend_id: p.id });
-    if (!error) {
-      setFriendIds((prev) => new Set(prev).add(p.id));
-      setFriends((prev) => (prev.some((f) => f.id === p.id) ? prev : [p, ...prev]));
-    }
+  // helpers
+  function rowFor(otherId: string) {
+    return rows.find(
+      (r) => (r.user_id === uid && r.friend_id === otherId) ||
+             (r.friend_id === uid && r.user_id === otherId)
+    );
+  }
+  function iSent(row: FriendRow) { return row.user_id === uid; }
+
+  async function sendInvite(p: Profile) {
+    if (!uid) return;
+    await supabase.from("friendships").insert({ user_id: uid, friend_id: p.id, status: "pending" });
+    await loadRows();
   }
 
-  async function removeFriend(id: string) {
-    if (!session) return;
-    await supabase
-      .from("friendships")
-      .delete()
-      .eq("user_id", session.user.id)
-      .eq("friend_id", id);
-    setFriendIds((prev) => {
-      const n = new Set(prev);
-      n.delete(id);
-      return n;
-    });
-    setFriends((prev) => prev.filter((f) => f.id !== id));
+  async function accept(row: FriendRow) {
+    // Update row to accepted
+    await supabase.from("friendships").update({ status: "accepted" })
+      .eq("user_id", row.user_id).eq("friend_id", row.friend_id);
+    // Insert reverse so both sides see each other as friends
+    await supabase.from("friendships").upsert(
+      { user_id: row.friend_id, friend_id: row.user_id, status: "accepted" },
+      { onConflict: "user_id,friend_id" }
+    );
+    await loadRows();
   }
 
-  function Row({ p, isFriend }: { p: PublicProfile; isFriend: boolean }) {
-    const { gradient, initials } = avatarFor(p);
+  async function decline(row: FriendRow) {
+    await supabase.from("friendships").delete()
+      .eq("user_id", row.user_id).eq("friend_id", row.friend_id);
+    await loadRows();
+  }
+
+  async function removeFriend(otherId: string) {
+    if (!uid) return;
+    // Delete both directions
+    await supabase.from("friendships").delete()
+      .eq("user_id", uid).eq("friend_id", otherId);
+    await supabase.from("friendships").delete()
+      .eq("user_id", otherId).eq("friend_id", uid);
+    await loadRows();
+  }
+
+  const acceptedFriends = rows.filter((r) => r.status === "accepted" && r.user_id === uid);
+  const incomingRequests = rows.filter((r) => r.status === "pending" && r.friend_id === uid);
+  const sentRequests = rows.filter((r) => r.status === "pending" && r.user_id === uid);
+
+  async function cancelInvite(row: FriendRow) {
+    await supabase.from("friendships").delete()
+      .eq("user_id", row.user_id).eq("friend_id", row.friend_id);
+    await loadRows();
+  }
+
+  if (!session) {
     return (
-      <li className="flex items-center gap-3 rounded-lg bg-card p-3 shadow-soft">
-        <Avatar initials={initials} gradient={gradient} size="md" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{p.name || p.username}</p>
-          <p className="truncate text-[13px] text-on-surface-variant">@{p.username}</p>
-        </div>
-        {isFriend ? (
-          <button
-            onClick={() => removeFriend(p.id)}
-            className="inline-flex items-center gap-1 rounded-full bg-surface-low px-3 py-2 text-[13px] font-semibold text-on-surface-variant"
-          >
-            <CheckIcon className="h-4 w-4 text-tertiary" />
-            Friends
-          </button>
-        ) : (
-          <button onClick={() => addFriend(p)} className="btn-primary h-10 px-4 text-sm">
-            <UserPlusIcon className="h-4 w-4" />
-            Add
-          </button>
-        )}
-      </li>
+      <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+        <span className="fab h-14 w-14"><UserPlusIcon className="h-7 w-7" /></span>
+        <p className="mt-4 font-semibold">Sign in to find friends</p>
+        <Link href="/login" className="btn-primary mt-5 h-11 px-6">Sign in</Link>
+      </div>
     );
   }
 
@@ -152,79 +133,162 @@ export default function FriendsPage() {
         <span />
       </header>
 
-      {!session ? (
-        <div className="flex flex-col items-center px-6 pt-16 text-center">
-          <span className="fab h-14 w-14">
-            <UserPlusIcon className="h-7 w-7" />
-          </span>
-          <p className="mt-4 font-semibold">Sign in to find friends</p>
-          <p className="mt-1 text-sm text-on-surface-variant">
-            Search people by username and add them to plan outings together.
-          </p>
-          <Link href="/login" className="btn-primary mt-5 h-11 px-6">
-            Sign in
-          </Link>
-        </div>
-      ) : (
-        <div className="px-5 pt-3">
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-outline" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="input pl-11"
-              placeholder="Search by username…"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                aria-label="Clear"
-                className="absolute right-3 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full bg-surface-high text-on-surface-variant"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {searching ? (
-            <section className="mt-4">
-              <h2 className="text-sm font-bold">Results</h2>
-              {results.length === 0 ? (
-                <p className="mt-3 rounded-lg bg-surface-low py-6 text-center text-sm text-on-surface-variant">
-                  No users match “{q}”.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {results.map((p) => (
-                    <Row key={p.id} p={p} isFriend={friendIds.has(p.id)} />
-                  ))}
-                </ul>
-              )}
-            </section>
-          ) : (
-            <section className="mt-4">
-              <h2 className="text-sm font-bold">
-                Your friends{" "}
-                <span className="font-normal text-on-surface-variant">· {friends.length}</span>
-              </h2>
-              {friends.length === 0 ? (
-                <p className="mt-3 rounded-lg bg-surface-low py-6 text-center text-sm text-on-surface-variant">
-                  No friends yet — search a username above to add someone.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {friends.map((p) => (
-                    <Row key={p.id} p={p} isFriend />
-                  ))}
-                </ul>
-              )}
-            </section>
+      <div className="px-5 pt-3 space-y-6">
+        {/* Search */}
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-outline" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="input pl-11"
+            placeholder="Search by username…"
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-outline">
+              <XIcon className="h-4 w-4" />
+            </button>
           )}
         </div>
-      )}
+
+        {/* Search results */}
+        {q.length >= 2 && (
+          <section>
+            <h2 className="mb-3 text-sm font-bold">Results</h2>
+            {searchResults.length === 0 ? (
+              <p className="rounded-xl bg-surface-low py-6 text-center text-sm text-on-surface-variant">No users match "@{q}".</p>
+            ) : (
+              <ul className="space-y-3">
+                {searchResults.map((p) => {
+                  const row = rowFor(p.id);
+                  const av = avatarFor(p);
+                  return (
+                    <li key={p.id} className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-soft">
+                      <Avatar initials={av.initials} gradient={av.gradient} size="md" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold">{p.name || p.username}</p>
+                        <p className="truncate text-[13px] text-on-surface-variant">@{p.username}</p>
+                      </div>
+                      {!row && (
+                        <button onClick={() => sendInvite(p)} className="btn-primary h-10 px-4 text-sm">
+                          <UserPlusIcon className="h-4 w-4" /> Add
+                        </button>
+                      )}
+                      {row?.status === "accepted" && (
+                        <button onClick={() => removeFriend(p.id)} className="rounded-full bg-surface-low px-3 py-2 text-[13px] font-semibold text-error transition active:scale-95">
+                          Remove
+                        </button>
+                      )}
+                      {row?.status === "pending" && iSent(row) && (
+                        <span className="rounded-full bg-surface-low px-3 py-2 text-[13px] font-semibold text-on-surface-variant">Pending</span>
+                      )}
+                      {row?.status === "pending" && !iSent(row) && (
+                        <div className="flex gap-2">
+                          <button onClick={() => accept(row)} className="grid h-9 w-9 place-items-center rounded-full bg-primary text-on-primary">
+                            <CheckIcon className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => decline(row)} className="grid h-9 w-9 place-items-center rounded-full bg-surface-high text-on-surface-variant">
+                            <XIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {/* Sent requests */}
+        {sentRequests.length > 0 && (
+          <section>
+            <h2 className="mb-3 text-sm font-bold">
+              Sent Requests <span className="ml-1 rounded-full bg-surface-low px-2 py-0.5 text-[11px] font-bold text-on-surface-variant">{sentRequests.length}</span>
+            </h2>
+            <ul className="space-y-3">
+              {sentRequests.map((row) => {
+                const av = avatarFor(row.other);
+                return (
+                  <li key={row.friend_id} className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-soft">
+                    <Avatar initials={av.initials} gradient={av.gradient} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{row.other.name || row.other.username}</p>
+                      <p className="truncate text-[13px] text-on-surface-variant">@{row.other.username}</p>
+                    </div>
+                    <button onClick={() => cancelInvite(row)}
+                      className="rounded-full bg-surface-low px-3 py-2 text-[13px] font-semibold text-on-surface-variant transition active:bg-error-container active:text-on-error-container">
+                      Cancel
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {/* Incoming requests */}
+        {incomingRequests.length > 0 && (
+          <section>
+            <h2 className="mb-3 text-sm font-bold">
+              Friend Requests <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-on-primary">{incomingRequests.length}</span>
+            </h2>
+            <ul className="space-y-3">
+              {incomingRequests.map((row) => {
+                const av = avatarFor(row.other);
+                return (
+                  <li key={row.user_id} className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-soft">
+                    <Avatar initials={av.initials} gradient={av.gradient} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{row.other.name || row.other.username}</p>
+                      <p className="truncate text-[13px] text-on-surface-variant">@{row.other.username}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => accept(row)} className="grid h-9 w-9 place-items-center rounded-full bg-primary text-on-primary">
+                        <CheckIcon className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => decline(row)} className="grid h-9 w-9 place-items-center rounded-full bg-surface-high text-on-surface-variant">
+                        <XIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {/* Accepted friends */}
+        <section>
+          <h2 className="mb-3 text-sm font-bold">
+            Your friends <span className="font-normal text-on-surface-variant">· {acceptedFriends.length}</span>
+          </h2>
+          {acceptedFriends.length === 0 ? (
+            <p className="rounded-xl bg-surface-low py-6 text-center text-sm text-on-surface-variant">
+              No friends yet — search a username above to send an invite.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {acceptedFriends.map((row) => {
+                const av = avatarFor(row.other);
+                return (
+                  <li key={row.friend_id} className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-soft">
+                    <Avatar initials={av.initials} gradient={av.gradient} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{row.other.name || row.other.username}</p>
+                      <p className="truncate text-[13px] text-on-surface-variant">@{row.other.username}</p>
+                    </div>
+                    <button onClick={() => removeFriend(row.friend_id)} className="rounded-full bg-surface-low px-3 py-2 text-[13px] font-semibold text-error transition active:scale-95">
+                      Remove
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

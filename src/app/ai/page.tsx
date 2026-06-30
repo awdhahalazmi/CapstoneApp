@@ -2,20 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AiIcon, SendIcon } from "@/components/icons";
-import { initialChat, assistantReply, friends } from "@/lib/mock-data";
+import { assistantReply } from "@/lib/mock-data";
 import { useGroups } from "@/lib/groups-store";
 import { useProfile } from "@/lib/supabase/use-session";
 import { supabase } from "@/lib/supabase/client";
 import type { ChatMessage } from "@/lib/types";
 
-const friendById = Object.fromEntries(friends.map((f) => [f.id, f]));
-
 export default function AiPage() {
   const { groups } = useGroups();
   const { profile } = useProfile();
   const interests = profile?.interests ?? [];
+  const firstName = (profile?.name ?? "").split(" ")[0] || null;
 
-  const [messages, setMessages] = useState<ChatMessage[]>(initialChat);
+  const greeting: ChatMessage = {
+    id: "c0",
+    role: "assistant",
+    content: `Hey${firstName ? ` ${firstName}` : ""} 👋 I'm your Beyond Kw assistant. Tell me who's coming and what you're in the mood for, and I'll plan the perfect outing for your group.`,
+  };
+
+  const [messages, setMessages] = useState<ChatMessage[]>([greeting]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -30,10 +35,7 @@ export default function AiPage() {
   const groupContext = selectedGroup
     ? {
         name: selectedGroup.name,
-        members: selectedGroup.memberIds
-          .map((id) => friendById[id])
-          .filter(Boolean)
-          .map((f) => ({ name: f.name, tagline: f.tagline })),
+        members: selectedGroup.members.map((m) => ({ name: m.name })),
       }
     : null;
 
@@ -53,11 +55,16 @@ export default function AiPage() {
       const { data, error } = await supabase.functions.invoke("ai-chat", {
         body: { messages: history, group: groupContext, interests },
       });
-      if (error || !data?.reply) throw error ?? new Error("no reply");
+      if (error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const body = await (error as any).context?.json?.().catch?.(() => null);
+        throw new Error(body?.error ?? error.message ?? "edge function error");
+      }
+      if (data?.error) throw new Error(data.error as string);
+      if (!data?.reply) throw new Error("no reply in response");
       replyText = data.reply as string;
-    } catch {
-      // Fallback: signed-out users, or the OpenRouter key isn't set yet.
-      replyText = assistantReply({ prompt: content, group: groupContext, interests });
+    } catch (err) {
+      replyText = `[AI error: ${err instanceof Error ? err.message : String(err)}]`;
     }
 
     setMessages((m) => [

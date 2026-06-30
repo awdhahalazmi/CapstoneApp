@@ -50,7 +50,8 @@ export default function FriendsRow() {
       const { data } = await supabase
         .from("friendships")
         .select("friend:profiles!friendships_friend_id_fkey(id, name, username)")
-        .eq("user_id", session.user.id);
+        .eq("user_id", session.user.id)
+        .eq("status", "accepted");
       if (!active) return;
       setFriends((data ?? []).map((r) => r.friend as unknown as Friend).filter(Boolean));
       setLoaded(true);

@@ -4,12 +4,14 @@
 */
 
 const sizeMap = {
+  xs: "h-6 w-6 text-[10px]",
   sm: "h-9 w-9 text-[12px]",
   md: "h-12 w-12 text-sm",
   lg: "h-16 w-16 text-lg",
 } as const;
 
 const dotMap = {
+  xs: "h-2 w-2",
   sm: "h-2.5 w-2.5",
   md: "h-3 w-3",
   lg: "h-3.5 w-3.5",

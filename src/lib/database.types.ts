@@ -18,16 +18,19 @@ export type Database = {
         Row: {
           created_at: string
           friend_id: string
+          status: string
           user_id: string
         }
         Insert: {
           created_at?: string
           friend_id: string
+          status?: string
           user_id: string
         }
         Update: {
           created_at?: string
           friend_id?: string
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -227,7 +230,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      username_available: { Args: { name: string }; Returns: boolean }
+      username_available: { Args: { p_username: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

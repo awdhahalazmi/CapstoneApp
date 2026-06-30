@@ -1,18 +1,26 @@
+"use client";
+
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import AiFab from "@/components/AiFab";
 import { BellIcon, SearchIcon, StarIcon, PinIcon } from "@/components/icons";
-import { currentUser, places, notifications } from "@/lib/mock-data";
+import { places } from "@/lib/mock-data";
+import { useProfile } from "@/lib/supabase/use-session";
+import { useFriends } from "@/lib/friends-store";
+import { avatarFor } from "@/lib/avatar";
 
 const filters = ["Nearby", "Outdoor", "Tonight", "Budget", "Coffee", "Group"];
 
 function priceLabel(level: number) {
-  return "$".repeat(level); // $ / $$ / $$$
+  return "$".repeat(level);
 }
 
 export default function Home() {
-  const unread = notifications.filter((n) => !n.read).length;
+  const { profile } = useProfile();
+  const { friends } = useFriends();
   const [featured, ...rest] = places;
+  const firstName = (profile?.name ?? "").split(" ")[0] || "there";
+  const av = avatarFor({ id: profile?.id, name: profile?.name, username: profile?.username });
 
   return (
     <div className="pb-24">
@@ -20,19 +28,14 @@ export default function Home() {
       <header className="sticky top-0 z-20 bg-surface/80 px-5 py-4 backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-on-surface-variant">Hi {currentUser.name} 👋</p>
+            <p className="text-sm text-on-surface-variant">Hi {firstName} 👋</p>
             <h1 className="text-2xl font-bold">Where to next?</h1>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/profile" aria-label="Notifications" className="relative text-on-surface">
+            <Link href="/notifications" aria-label="Notifications" className="relative text-on-surface">
               <BellIcon />
-              {unread > 0 && (
-                <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-error text-[10px] font-bold text-on-error">
-                  {unread}
-                </span>
-              )}
             </Link>
-            <Avatar initials={currentUser.initials} gradient={currentUser.gradient} size="sm" />
+            <Avatar initials={av.initials} gradient={av.gradient} size="sm" />
           </div>
         </div>
 
@@ -54,6 +57,31 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Friends mini-row */}
+      {friends.length > 0 && (
+        <section className="px-5 pt-2 pb-1">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-bold">Your crew</p>
+            <Link href="/community" className="text-[13px] font-semibold text-primary">See all</Link>
+          </div>
+          <div className="no-scrollbar flex gap-3 overflow-x-auto">
+            {friends.slice(0, 8).map((f) => {
+              const fav = avatarFor(f);
+              return (
+                <div key={f.id} className="flex shrink-0 flex-col items-center gap-1">
+                  <div className={`h-11 w-11 rounded-full bg-gradient-to-br ${fav.gradient} grid place-items-center text-[13px] font-bold text-white`}>
+                    {fav.initials}
+                  </div>
+                  <span className="max-w-[44px] truncate text-[10px] font-medium text-on-surface-variant">
+                    {f.username ?? (f.name ?? "").split(" ")[0]}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* AI picks for your crew */}
       <section className="pt-1">
