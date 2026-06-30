@@ -1,14 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import AiFab from "@/components/AiFab";
-import FriendsRow from "@/components/FriendsRow";
-import { MenuIcon, UserPlusIcon } from "@/components/icons";
-import { useProfile } from "@/lib/supabase/use-session";
+import { MenuIcon, UserPlusIcon, CheckIcon, XIcon } from "@/components/icons";
+import { useProfile, useSession } from "@/lib/supabase/use-session";
 import { useFriends } from "@/lib/friends-store";
 import { useGroups } from "@/lib/groups-store";
 import { avatarFor } from "@/lib/avatar";
+import { supabase } from "@/lib/supabase/client";
+
+type PendingRequest = { id: string; name: string; username: string | null };
 
 const INTEREST_EMOJIS: Record<string, string> = {
   Coffee: "☕", Rooftops: "🌆", Brunch: "🥞", "Live music": "🎵",
@@ -19,9 +22,53 @@ const INTEREST_EMOJIS: Record<string, string> = {
 
 export default function CommunityPage() {
   const { profile } = useProfile();
+  const session = useSession();
+  const uid = session?.user?.id;
   const { friends } = useFriends();
   const { groups } = useGroups();
   const av = avatarFor({ id: profile?.id, name: profile?.name, username: profile?.username });
+
+  const [requests, setRequests] = useState<PendingRequest[]>([]);
+
+  useEffect(() => {
+    if (!uid) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from("friendships")
+        .select("sender:profiles!friendships_user_id_fkey(id, name, username)")
+        .eq("friend_id", uid)
+        .eq("status", "pending");
+      if (!active) return;
+      setRequests((data ?? []).map((r) => r.sender as unknown as PendingRequest).filter(Boolean));
+    })();
+    return () => { active = false; };
+  }, [uid]);
+
+  async function acceptRequest(req: PendingRequest) {
+    if (!uid) return;
+    await supabase.from("friendships").update({ status: "accepted" })
+      .eq("user_id", req.id).eq("friend_id", uid);
+    await supabase.from("friendships").upsert(
+      { user_id: uid, friend_id: req.id, status: "accepted" },
+      { onConflict: "user_id,friend_id" }
+    );
+    const accepterName = profile?.name ?? profile?.username ?? "Someone";
+    await supabase.from("notifications").insert({
+      user_id: req.id,
+      message: `${accepterName} accepted your friend request`,
+      kind: "ping",
+      read: false,
+    });
+    setRequests((prev) => prev.filter((r) => r.id !== req.id));
+  }
+
+  async function declineRequest(req: PendingRequest) {
+    if (!uid) return;
+    await supabase.from("friendships").delete()
+      .eq("user_id", req.id).eq("friend_id", uid);
+    setRequests((prev) => prev.filter((r) => r.id !== req.id));
+  }
 
   // Groups each friend is in (intersection with my groups)
   const myGroupIds = new Set(groups.map((g) => g.id));
@@ -37,15 +84,48 @@ export default function CommunityPage() {
         <Avatar initials={av.initials} gradient={av.gradient} size="sm" />
       </header>
 
-      {/* Friends row */}
-      <section className="px-5 pt-2">
-        <FriendsRow />
-      </section>
+      {/* Friend requests banner */}
+      {requests.length > 0 && (
+        <section className="px-5 pt-4">
+          <div className="rounded-2xl border border-primary/20 bg-primary/8 p-4 space-y-3">
+            <h2 className="flex items-center gap-2 font-bold text-[15px] text-primary">
+              Friend Requests
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-on-primary">
+                {requests.length}
+              </span>
+            </h2>
+            {requests.map((req) => {
+              const rav = avatarFor(req);
+              return (
+                <div key={req.id} className="flex items-center gap-3">
+                  <div className={`h-10 w-10 shrink-0 rounded-full bg-gradient-to-br ${rav.gradient} grid place-items-center text-sm font-bold text-white`}>
+                    {rav.initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[14px]">{req.name || req.username}</p>
+                    {req.username && (
+                      <p className="text-[12px] text-on-surface-variant">@{req.username}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => acceptRequest(req)} className="grid h-8 w-8 place-items-center rounded-full bg-primary text-on-primary transition active:scale-95">
+                      <CheckIcon className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => declineRequest(req)} className="grid h-8 w-8 place-items-center rounded-full bg-surface-high text-on-surface-variant transition active:scale-95">
+                      <XIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Friends activity */}
       <section className="px-5 pt-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">Your Crew</h2>
+          <h2 className="text-2xl font-bold">Your squad</h2>
           <Link href="/friends"
             className="inline-flex items-center gap-1.5 rounded-full bg-secondary-container px-3 py-1.5 text-[13px] font-semibold text-primary">
             <UserPlusIcon className="h-4 w-4" />

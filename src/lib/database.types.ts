@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      check_ins: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string | null
+          is_private: boolean
+          note: string | null
+          place_name: string
+          rating: number | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_private?: boolean
+          note?: string | null
+          place_name: string
+          rating?: number | null
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_private?: boolean
+          note?: string | null
+          place_name?: string
+          rating?: number | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_ins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       friendships: {
         Row: {
           created_at: string
@@ -50,6 +94,51 @@ export type Database = {
           },
         ]
       }
+      group_availability: {
+        Row: {
+          created_at: string | null
+          date: string
+          group_id: string
+          id: string
+          time_slot: string
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          group_id: string
+          id?: string
+          time_slot: string
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          group_id?: string
+          id?: string
+          time_slot?: string
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_availability_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_availability_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_members: {
         Row: {
           added_at: string
@@ -79,6 +168,99 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_messages: {
+        Row: {
+          content: string
+          created_at: string
+          group_id: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          group_id: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_places: {
+        Row: {
+          added_by: string
+          added_by_name: string
+          category: string
+          created_at: string | null
+          description: string | null
+          group_id: string
+          id: string
+          lat: number
+          lng: number
+          title: string
+        }
+        Insert: {
+          added_by: string
+          added_by_name: string
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          group_id: string
+          id?: string
+          lat: number
+          lng: number
+          title: string
+        }
+        Update: {
+          added_by?: string
+          added_by_name?: string
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          group_id?: string
+          id?: string
+          lat?: number
+          lng?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_places_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_places_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
             referencedColumns: ["id"]
           },
         ]
@@ -153,6 +335,39 @@ export type Database = {
           },
         ]
       }
+      place_votes: {
+        Row: {
+          created_at: string | null
+          place_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          place_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          place_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "place_votes_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "group_places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "place_votes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       places: {
         Row: {
           ai_reason: string | null
@@ -192,8 +407,54 @@ export type Database = {
         }
         Relationships: []
       }
+      planned_outings: {
+        Row: {
+          created_at: string
+          created_by: string
+          group_id: string | null
+          id: string
+          notes: string | null
+          place_name: string
+          planned_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          place_name: string
+          planned_at: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          place_name?: string
+          planned_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planned_outings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planned_outings_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
+          availability_status: string
           avatar_url: string | null
           city: string | null
           created_at: string
@@ -204,6 +465,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          availability_status?: string
           avatar_url?: string | null
           city?: string | null
           created_at?: string
@@ -214,6 +476,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          availability_status?: string
           avatar_url?: string | null
           city?: string | null
           created_at?: string
@@ -225,11 +488,126 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_group_links: {
+        Row: {
+          group_id: string
+          id: string
+          synced_at: string | null
+          user_id: string
+          wa_jid: string
+          wa_name: string
+          wa_participant_count: number | null
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          synced_at?: string | null
+          user_id: string
+          wa_jid: string
+          wa_name: string
+          wa_participant_count?: number | null
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          synced_at?: string | null
+          user_id?: string
+          wa_jid?: string
+          wa_name?: string
+          wa_participant_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_group_links_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_group_links_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_polls: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          enc_key: string | null
+          group_id: string
+          id: string
+          options: Json
+          question: string
+          vote_counts: Json | null
+          voter_map: Json | null
+          wa_jid: string
+          wa_message_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          enc_key?: string | null
+          group_id: string
+          id?: string
+          options: Json
+          question: string
+          vote_counts?: Json | null
+          voter_map?: Json | null
+          wa_jid: string
+          wa_message_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          enc_key?: string | null
+          group_id?: string
+          id?: string
+          options?: Json
+          question?: string
+          vote_counts?: Json | null
+          voter_map?: Json | null
+          wa_jid?: string
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_polls_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_polls_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_active_polls: {
+        Args: never
+        Returns: {
+          enc_key: string
+          group_id: string
+          options: Json
+          wa_message_id: string
+        }[]
+      }
+      update_poll_votes: {
+        Args: { p_vote_counts: Json; p_wa_message_id: string }
+        Returns: undefined
+      }
       username_available: { Args: { p_username: string }; Returns: boolean }
     }
     Enums: {

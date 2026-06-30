@@ -31,6 +31,8 @@ export default function EditGroupPage() {
   const [results, setResults] = useState<GroupMember[]>([]);
   const [searching, setSearching] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,8 +80,16 @@ export default function EditGroupPage() {
 
   async function handleDelete() {
     if (!group) return;
-    await deleteGroup(group.id);
-    router.push("/groups");
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteGroup(group.id);
+      router.push("/groups");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete group";
+      setDeleteError(msg);
+      setDeleting(false);
+    }
   }
 
   // Avatar row: current members + search results merged
@@ -200,17 +210,32 @@ export default function EditGroupPage() {
               <p className="text-sm font-semibold text-on-error-container">
                 Delete "{group.name}"? This can't be undone.
               </p>
+              {deleteError && (
+                <p className="mt-2 text-[12px] text-error">{deleteError}</p>
+              )}
               <div className="mt-3 flex gap-3">
-                <button onClick={() => setConfirmDelete(false)} className="btn-secondary h-11 flex-1">Cancel</button>
-                <button onClick={handleDelete}
-                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-error text-[15px] font-semibold text-on-error transition active:scale-[0.98]">
-                  <TrashIcon className="h-4 w-4" /> Delete
+                <button
+                  onClick={() => { setConfirmDelete(false); setDeleteError(null); }}
+                  disabled={deleting}
+                  className="btn-secondary h-11 flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-error text-[15px] font-semibold text-on-error transition active:scale-[0.98] disabled:opacity-60"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  {deleting ? "Deleting…" : "Delete"}
                 </button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setConfirmDelete(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold text-error transition active:scale-[0.99]">
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold text-error transition active:scale-[0.99]"
+            >
               <TrashIcon className="h-4 w-4" /> Delete group
             </button>
           )}

@@ -112,7 +112,15 @@ export function useGroups() {
   }
 
   async function deleteGroup(id: string) {
-    await supabase.from("groups").delete().eq("id", id);
+    // Delete children that may not have ON DELETE CASCADE yet
+    await supabase.from("group_messages").delete().eq("group_id", id);
+    await supabase.from("group_members").delete().eq("group_id", id);
+
+    const { error } = await supabase.from("groups").delete().eq("id", id);
+    if (error) {
+      console.error("[deleteGroup] failed:", error.message, error.code);
+      throw new Error(error.message);
+    }
     await refresh();
   }
 
