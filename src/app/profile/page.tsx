@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { XIcon, PlusIcon } from "@/components/icons";
-import { SUGGESTED_INTERESTS } from "@/lib/mock-data";
+const SUGGESTED_INTERESTS = [
+  "Coffee", "Rooftops", "Brunch", "Live music", "Hiking", "Beaches",
+  "Art", "Foodie", "Nightlife", "Shopping", "Sports", "Gaming",
+  "Chill", "Hidden Gems", "Photography", "Desert camping", "Board games",
+];
 import { avatarFor } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase/client";
 import { useSession, useProfile, refreshProfile } from "@/lib/supabase/use-session";
