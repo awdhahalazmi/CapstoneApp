@@ -79,7 +79,11 @@ function jidToFileName(waJid: string): string {
 function keyAuthorCandidates(key: { fromMe?: boolean; participant?: string; participantAlt?: string; remoteJid?: string; remoteJidAlt?: string } | undefined, meCandidates: string[]): string[] {
   if (!key) return [""];
   if (key.fromMe) return meCandidates.length ? meCandidates : [""];
-  return [key.participantAlt || key.remoteJidAlt || key.participant || key.remoteJid || ""];
+  // Try every identity form (PN and LID), not just the first one found — which
+  // of these WhatsApp used for a given voter's vote HMAC isn't observable from
+  // outside Baileys' internal signal state, same as for our own votes above.
+  const candidates = [key.participant, key.participantAlt, key.remoteJid, key.remoteJidAlt].filter((j): j is string => !!j);
+  return candidates.length ? Array.from(new Set(candidates)) : [""];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -228,11 +232,14 @@ class WhatsAppManager {
     }
   }
 
-  private _updatePollVotes(session: Session, remoteJid: string, msgId: string, voteCounts: Record<string, number>): void {
+  private _updatePollVotes(userId: string, session: Session, remoteJid: string, msgId: string, voteCounts: Record<string, number>): void {
     const msgs = session.waMessages.get(remoteJid);
     if (!msgs) return;
     const poll = msgs.find((m) => m.id === msgId);
-    if (poll) poll.pollVotes = voteCounts;
+    if (poll) {
+      poll.pollVotes = voteCounts;
+      this._scheduleSave(userId, remoteJid, session);
+    }
   }
 
   // Merge poll registration: a Baileys-supplied encKey/creator always wins
@@ -247,6 +254,71 @@ class WhatsAppManager {
     if (encKey && !existing.encKey) existing.encKey = encKey;
     if (creatorJidCandidates?.length && !existing.creatorJidCandidates?.length) existing.creatorJidCandidates = creatorJidCandidates;
     if (options.length && existing.options.length === 0) existing.options = options;
+  }
+
+  // Decrypt a single poll vote, aggregate it into the poll's running tally, and
+  // persist the result. Shared by the live messages.upsert handler and the
+  // messaging-history.set handler so votes cast before this connection's
+  // history sync (which Baileys delivers as ordinary history messages, not a
+  // replayed live event) are decrypted too, not just votes that arrive while connected.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _processPollVote(userId: string, session: Session, sock: any, decryptPollVote: any, getAggregateVotesInPollMessage: any, jidNormalizedUser: (jid: string) => string, msg: any): void {
+    const pollUpdate = msg?.message?.pollUpdateMessage;
+    if (!pollUpdate) return;
+    const pollMsgId: string | undefined = pollUpdate.pollCreationMessageKey?.id;
+    if (!pollMsgId) return;
+    const entry = this.pollRegistry.get(pollMsgId);
+    if (!entry) { console.warn(`[WA] Vote for unknown poll ${pollMsgId?.slice(0, 8)}`); return; }
+    if (!entry.encKey || !entry.creatorJidCandidates?.length) { console.warn(`[WA] Poll ${pollMsgId.slice(0, 8)} missing encKey/creator — cannot decrypt vote`); return; }
+
+    const meCands = meIdentityCandidates(sock, jidNormalizedUser);
+    const voterCandidates = keyAuthorCandidates(msg.key, meCands);
+
+    // WhatsApp accounts can be addressed by phone-number JID or LID JID
+    // depending on the group; try every creator x voter combination
+    // until one produces a valid GCM auth tag.
+    let voteMsg: { selectedOptions?: Uint8Array[] } | null = null;
+    for (const creator of entry.creatorJidCandidates) {
+      for (const voter of voterCandidates) {
+        try {
+          voteMsg = decryptPollVote(pollUpdate.vote, { pollEncKey: entry.encKey, pollCreatorJid: creator, pollMsgId, voterJid: voter });
+          break;
+        } catch { /* try next identity combo */ }
+      }
+      if (voteMsg) break;
+    }
+    if (!voteMsg) {
+      console.error(`[WA] vote decrypt failed for poll ${pollMsgId.slice(0, 8)} across ${entry.creatorJidCandidates.length}x${voterCandidates.length} identity combos`);
+      return;
+    }
+
+    // Replace this voter's previous selection (votes are full snapshots, not deltas)
+    const bookkeepingVoter = voterCandidates[0] ?? "";
+    entry.pollUpdates = entry.pollUpdates.filter((u) => (keyAuthorCandidates(u.pollUpdateMessageKey, meCands)[0] ?? "") !== bookkeepingVoter);
+    entry.pollUpdates.push({ pollUpdateMessageKey: msg.key, vote: voteMsg });
+
+    let aggregated: { name: string; voters: string[] }[];
+    try {
+      aggregated = getAggregateVotesInPollMessage(
+        { message: { pollCreationMessage: { options: entry.options.map((n: string) => ({ optionName: n })) } }, pollUpdates: entry.pollUpdates },
+        meCands[0] ?? sock.user?.id
+      );
+    } catch (e) { console.error("[WA] vote aggregation error:", e); return; }
+
+    const voteCounts: Record<string, number> = {};
+    for (let i = 0; i < aggregated.length; i++) voteCounts[String(i)] = aggregated[i].voters.length;
+    console.log(`[WA] Poll ${pollMsgId.slice(0, 8)} votes:`, voteCounts);
+
+    // Update in-memory poll message with vote counts
+    const remoteJid: string = msg.key?.remoteJid ?? "";
+    this._updatePollVotes(userId, session, remoteJid, pollMsgId, voteCounts);
+
+    // Persist to Supabase
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_poll_votes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "" },
+      body: JSON.stringify({ p_wa_message_id: pollMsgId, p_vote_counts: voteCounts }),
+    }).catch((e) => console.error("[WA] vote persist error:", e));
   }
 
   async startSession(userId: string): Promise<void> {
@@ -380,6 +452,10 @@ class WhatsAppManager {
         if (!histMsgs?.length) return;
         let count = 0;
         const meCands = meIdentityCandidates(sock, jidNormalizedUser);
+
+        // Pass 1: register every poll creation first, so pass 2 can resolve
+        // the encKey/creator for any vote that appears anywhere in this batch
+        // (a vote can be ordered before its poll's creation message).
         for (const msg of histMsgs) {
           const remoteJid: string = msg.key?.remoteJid ?? "";
           if (!remoteJid.endsWith("@g.us")) continue;
@@ -393,6 +469,19 @@ class WhatsAppManager {
             const encKey = secret ? Buffer.from(secret) : undefined;
             const creatorCandidates = keyAuthorCandidates(msg.key, meCands);
             this._upsertPollEntry(msg.key.id, remoteJid, (pm.options ?? []).map((o: any) => o.optionName ?? ""), encKey, creatorCandidates); // eslint-disable-line @typescript-eslint/no-explicit-any
+          }
+        }
+
+        // Pass 2: decrypt poll votes (cast before this connection's history
+        // sync, so they never reached the live messages.upsert handler) and
+        // store regular chat messages.
+        for (const msg of histMsgs) {
+          const remoteJid: string = msg.key?.remoteJid ?? "";
+          if (!remoteJid.endsWith("@g.us")) continue;
+
+          if (msg.message?.pollUpdateMessage) {
+            this._processPollVote(userId, session, sock, decryptPollVote, getAggregateVotesInPollMessage, jidNormalizedUser, msg);
+            continue;
           }
 
           const parsed = parseMessage(msg, sock);
@@ -423,62 +512,8 @@ class WhatsAppManager {
         for (const msg of messages) {
 
           // ── Poll votes ────────────────────────────────────────────────────
-          const pollUpdate = msg?.message?.pollUpdateMessage;
-          if (pollUpdate) {
-            const pollMsgId: string | undefined = pollUpdate.pollCreationMessageKey?.id;
-            if (!pollMsgId) continue;
-            const entry = this.pollRegistry.get(pollMsgId);
-            if (!entry) { console.warn(`[WA] Vote for unknown poll ${pollMsgId?.slice(0, 8)}`); continue; }
-            if (!entry.encKey || !entry.creatorJidCandidates?.length) { console.warn(`[WA] Poll ${pollMsgId.slice(0, 8)} missing encKey/creator — cannot decrypt vote`); continue; }
-
-            const meCands = meIdentityCandidates(sock, jidNormalizedUser);
-            const voterCandidates = keyAuthorCandidates(msg.key, meCands);
-
-            // WhatsApp accounts can be addressed by phone-number JID or LID JID
-            // depending on the group; try every creator x voter combination
-            // until one produces a valid GCM auth tag.
-            let voteMsg: { selectedOptions?: Uint8Array[] } | null = null;
-            for (const creator of entry.creatorJidCandidates) {
-              for (const voter of voterCandidates) {
-                try {
-                  voteMsg = decryptPollVote(pollUpdate.vote, { pollEncKey: entry.encKey, pollCreatorJid: creator, pollMsgId, voterJid: voter });
-                  break;
-                } catch { /* try next identity combo */ }
-              }
-              if (voteMsg) break;
-            }
-            if (!voteMsg) {
-              console.error(`[WA] vote decrypt failed for poll ${pollMsgId.slice(0, 8)} across ${entry.creatorJidCandidates.length}x${voterCandidates.length} identity combos`);
-              continue;
-            }
-
-            // Replace this voter's previous selection (votes are full snapshots, not deltas)
-            const bookkeepingVoter = voterCandidates[0] ?? "";
-            entry.pollUpdates = entry.pollUpdates.filter((u) => (keyAuthorCandidates(u.pollUpdateMessageKey, meCands)[0] ?? "") !== bookkeepingVoter);
-            entry.pollUpdates.push({ pollUpdateMessageKey: msg.key, vote: voteMsg });
-
-            let aggregated: { name: string; voters: string[] }[];
-            try {
-              aggregated = getAggregateVotesInPollMessage(
-                { message: { pollCreationMessage: { options: entry.options.map((n: string) => ({ optionName: n })) } }, pollUpdates: entry.pollUpdates },
-                meCands[0] ?? sock.user?.id
-              );
-            } catch (e) { console.error("[WA] vote aggregation error:", e); continue; }
-
-            const voteCounts: Record<string, number> = {};
-            for (let i = 0; i < aggregated.length; i++) voteCounts[String(i)] = aggregated[i].voters.length;
-            console.log(`[WA] Poll ${pollMsgId.slice(0, 8)} votes:`, voteCounts);
-
-            // Update in-memory poll message with vote counts
-            const remoteJid: string = msg.key?.remoteJid ?? "";
-            this._updatePollVotes(session, remoteJid, pollMsgId, voteCounts);
-
-            // Persist to Supabase
-            fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_poll_votes`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "" },
-              body: JSON.stringify({ p_wa_message_id: pollMsgId, p_vote_counts: voteCounts }),
-            }).catch((e) => console.error("[WA] vote persist error:", e));
+          if (msg?.message?.pollUpdateMessage) {
+            this._processPollVote(userId, session, sock, decryptPollVote, getAggregateVotesInPollMessage, jidNormalizedUser, msg);
             continue;
           }
 
@@ -495,7 +530,11 @@ class WhatsAppManager {
           }
 
           // ── All other message types ───────────────────────────────────────
-          if (type !== "notify") continue;
+          // Baileys echoes our own sent messages (sock.sendMessage) through this
+          // same listener with type "append" rather than "notify" — without this,
+          // anything sent from the app (text, polls, ...) never shows in our own
+          // chat view. _storeMessage already dedupes by id, so this can't double-store.
+          if (type !== "notify" && !msg.key?.fromMe) continue;
           const remoteJid: string = msg.key?.remoteJid ?? "";
           if (!remoteJid.endsWith("@g.us")) continue;
 

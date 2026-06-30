@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/use-session";
 import { useGroups } from "@/lib/groups-store";
-import { ArrowLeftIcon, PlusIcon, XIcon } from "@/components/icons";
+import { ArrowLeftIcon, PlusIcon, SendIcon, XIcon } from "@/components/icons";
 import type { WAInMemoryMessage } from "@/lib/whatsapp/manager";
 
 type WALink = { waJid: string; waName: string; participantCount: number };
@@ -18,6 +18,7 @@ type WAPoll = {
   vote_counts: Record<string, number>;
   wa_message_id: string | null;
   created_at: string;
+  created_by: string;
 };
 
 type ChatItem =
@@ -261,18 +262,18 @@ function CreatePollSheet({ groupId, userId, waJid, onClose }: {
 }
 
 // ── Poll bubble (for DB-sourced polls) ────────────────────────────────────────
-function PollBubble({ poll }: { poll: WAPoll }) {
+function PollBubble({ poll, isMe }: { poll: WAPoll; isMe: boolean }) {
   const counts = poll.vote_counts ?? {};
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const maxCount = Math.max(...poll.options.map((_, i) => counts[String(i)] ?? 0), 0);
   return (
-    <div className="mt-3 flex justify-start pl-10">
-      <div className="max-w-[80%] overflow-hidden rounded-[20px] rounded-bl-[4px] bg-surface-container">
-        <div className="flex items-center gap-2 border-b border-outline-variant/20 px-4 py-3">
+    <div className={`mt-3 flex ${isMe ? "justify-end pr-10" : "justify-start pl-10"}`}>
+      <div className={`max-w-[80%] overflow-hidden rounded-[20px] ${isMe ? "rounded-br-[4px] bg-primary text-on-primary" : "rounded-bl-[4px] bg-surface-container text-on-surface"}`}>
+        <div className={`flex items-center gap-2 border-b px-4 py-3 ${isMe ? "border-white/15" : "border-outline-variant/20"}`}>
           <span className="text-[18px]">📊</span>
           <div>
-            <p className="text-[14px] font-semibold text-on-surface">{poll.question}</p>
-            <p className="text-[11px] text-on-surface-variant">
+            <p className="text-[14px] font-semibold">{poll.question}</p>
+            <p className={`text-[11px] ${isMe ? "text-on-primary/70" : "text-on-surface-variant"}`}>
               {total > 0 ? `${total} vote${total !== 1 ? "s" : ""}` : "No votes yet"} · Vote on WhatsApp
             </p>
           </div>
@@ -285,20 +286,20 @@ function PollBubble({ poll }: { poll: WAPoll }) {
             return (
               <div key={i}>
                 <div className="mb-1 flex items-center justify-between">
-                  <span className={`flex items-center gap-1 text-[13px] ${isWinner ? "font-semibold text-primary" : "text-on-surface"}`}>
+                  <span className={`flex items-center gap-1 text-[13px] ${isWinner ? `font-semibold ${isMe ? "" : "text-primary"}` : isMe ? "" : "text-on-surface"}`}>
                     {isWinner && "🏆 "}{opt}
                   </span>
-                  <span className={`ml-2 shrink-0 text-[11px] tabular-nums ${isWinner ? "text-primary" : "text-on-surface-variant"}`}>{pct}%</span>
+                  <span className={`ml-2 shrink-0 text-[11px] tabular-nums ${isMe ? "text-on-primary/80" : isWinner ? "text-primary" : "text-on-surface-variant"}`}>{pct}%</span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-on-surface/8">
-                  <div className={`h-full rounded-full transition-all duration-500 ${isWinner ? "bg-primary" : "bg-primary/35"}`} style={{ width: `${pct}%` }} />
+                <div className={`h-1.5 w-full overflow-hidden rounded-full ${isMe ? "bg-on-primary/20" : "bg-on-surface/8"}`}>
+                  <div className={`h-full rounded-full transition-all duration-500 ${isMe ? "bg-on-primary" : isWinner ? "bg-primary" : "bg-primary/35"}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
             );
           })}
         </div>
         <div className="px-4 pb-2.5 text-right">
-          <span className="text-[10px] text-on-surface-variant/50">{fmt(new Date(poll.created_at).getTime())}</span>
+          <span className={`text-[10px] ${isMe ? "text-on-primary/60" : "text-on-surface-variant/50"}`}>{fmt(new Date(poll.created_at).getTime())}</span>
         </div>
       </div>
     </div>
@@ -319,12 +320,29 @@ export default function WAGroupPage() {
   const [polls, setPolls] = useState<WAPoll[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     endRef.current?.scrollIntoView({ behavior });
   }, []);
+
+  async function sendMessage() {
+    const content = text.trim();
+    if (!content || !profile?.id || !waLink?.waJid || sending) return;
+    setSending(true);
+    setText("");
+    try {
+      await fetch("/api/whatsapp/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: profile.id, waJid: waLink.waJid, content }),
+      });
+      setTimeout(() => scrollToBottom("smooth"), 300);
+    } catch (err) { console.error(err); } finally { setSending(false); }
+  }
 
   // Load WA link + check connection status
   useEffect(() => {
@@ -384,10 +402,17 @@ export default function WAGroupPage() {
   // Initial scroll
   useEffect(() => { if (!loading) scrollToBottom("instant" as ScrollBehavior); }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Build merged, sorted timeline — dedupe polls that also appear as Baileys messages
+  // Build merged, sorted timeline — dedupe polls that also appear as Baileys messages.
+  // Supabase vote_counts survives server restarts/hot-reloads (the in-memory
+  // pollVotes on Baileys messages does not), so it's always the source of truth.
   const baileysIds = new Set(messages.filter(m => m.msgType === "poll").map(m => m.id));
+  const dbVoteCountsByWaId = new Map(polls.filter(p => p.wa_message_id).map(p => [p.wa_message_id as string, p.vote_counts]));
   const chatItems: ChatItem[] = [
-    ...messages.map(m => ({ kind: "msg" as const, ts: m.timestampMs, data: m })),
+    ...messages.map(m => ({
+      kind: "msg" as const,
+      ts: m.timestampMs,
+      data: m.msgType === "poll" && dbVoteCountsByWaId.has(m.id) ? { ...m, pollVotes: dbVoteCountsByWaId.get(m.id) } : m,
+    })),
     // Only include DB polls that didn't come through Baileys (no duplicate)
     ...polls.filter(p => !p.wa_message_id || !baileysIds.has(p.wa_message_id))
             .map(p => ({ kind: "poll" as const, ts: new Date(p.created_at).getTime(), data: p })),
@@ -412,7 +437,7 @@ export default function WAGroupPage() {
         );
       }
       if (item.kind === "poll") {
-        nodes.push(<PollBubble key={`poll-${item.data.id}`} poll={item.data} />);
+        nodes.push(<PollBubble key={`poll-${item.data.id}`} poll={item.data} isMe={item.data.created_by === profile?.id} />);
         prevMsg = undefined;
       } else {
         nodes.push(<MessageBubble key={item.data.id} msg={item.data} prevMsg={prevMsg} />);
@@ -485,6 +510,24 @@ export default function WAGroupPage() {
 
       {/* Bottom bar */}
       <div className="shrink-0 border-t border-outline-variant/20 bg-surface px-4 py-3 pb-safe">
+        <div className="mb-2.5 flex items-end gap-2">
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            placeholder={waLink ? "Message…" : "Connect WhatsApp to chat"}
+            disabled={!waLink}
+            className="flex-1 rounded-full border border-outline bg-transparent px-4 py-2.5 text-[14px] text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50 disabled:opacity-50"
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!waLink || !text.trim() || sending}
+            aria-label="Send message"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-on-primary shadow-sm active:scale-[0.96] disabled:opacity-40"
+          >
+            <SendIcon className="h-4 w-4" />
+          </button>
+        </div>
         <div className="flex gap-3">
           <button
             onClick={() => setShowCreate(true)}
