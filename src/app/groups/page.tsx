@@ -99,12 +99,22 @@ function GroupRow({ group, waLinked }: { group: Group; waLinked: boolean }) {
         >
           <span>📊</span> Polls
         </Link>
-        <Link
-          href={`/groups/${group.id}/chat`}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gray-50 py-2 text-[13px] font-medium text-gray-500 transition active:scale-[0.97]"
-        >
-          <span>💬</span> Chat
-        </Link>
+        {waLinked ? (
+          <Link
+            href={`/groups/${group.id}/whatsapp`}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#25d366]/10 py-2 text-[13px] font-medium text-[#128c7e] transition active:scale-[0.97]"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-[#25d366]" />
+            WhatsApp
+          </Link>
+        ) : (
+          <Link
+            href={`/groups/${group.id}/chat`}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gray-50 py-2 text-[13px] font-medium text-gray-500 transition active:scale-[0.97]"
+          >
+            <span>💬</span> Chat
+          </Link>
+        )}
       </div>
     </div>
   );

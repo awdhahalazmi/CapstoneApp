@@ -34,6 +34,8 @@ class WhatsAppManager {
   private sessionsDir = path.join(process.cwd(), ".wa-sessions");
   private pollRegistry = new Map<string, PollEntry>();
   private liveVotes = new Map<string, Map<string, number[]>>();
+  // Cache `${userId}:${waJid}` → groupId to avoid repeated DB lookups
+  private groupLinkCache = new Map<string, string>();
   // Prevents duplicate startSession calls while async init is in flight
   private starting = new Set<string>();
 
@@ -173,68 +175,109 @@ class WhatsAppManager {
 
       sock.ev.on("creds.update", saveCreds);
 
-      // ── Poll vote listener ────────────────────────────────────────────────
+      // ── Message listener (poll votes + text capture) ─────────────────────
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      sock.ev.on("messages.upsert", ({ messages }: any) => {
+      sock.ev.on("messages.upsert", async ({ messages, type }: any) => {
         for (const msg of messages) {
+
+          // ── Poll vote handling ──────────────────────────────────────────
           const pollUpdate = msg?.message?.pollUpdateMessage;
-          if (!pollUpdate) continue;
+          if (pollUpdate) {
+            const pollMsgId: string | undefined =
+              pollUpdate.pollCreationMessageKey?.id;
+            if (!pollMsgId) continue;
 
-          const pollMsgId: string | undefined =
-            pollUpdate.pollCreationMessageKey?.id;
-          if (!pollMsgId) continue;
+            const entry = this.pollRegistry.get(pollMsgId);
+            if (!entry) {
+              console.log("[WA] Poll vote ignored — poll not in registry:", pollMsgId?.slice(0, 8));
+              continue;
+            }
 
-          const entry = this.pollRegistry.get(pollMsgId);
-          if (!entry) {
-            console.log("[WA] Poll vote ignored — poll not in registry:", pollMsgId?.slice(0, 8));
-            continue;
-          }
+            const voterJid: string =
+              msg.key?.participant || msg.key?.remoteJid || "unknown";
 
-          const voterJid: string =
-            msg.key?.participant || msg.key?.remoteJid || "unknown";
+            entry.pollUpdates.push({
+              vote: pollUpdate.vote,
+              pollUpdateMessageKey: msg.key,
+            });
 
-          // Accumulate this update so getAggregateVotesInPollMessage has full history
-          entry.pollUpdates.push({
-            vote: pollUpdate.vote,
-            pollUpdateMessageKey: msg.key,
-          });
+            const fakeCreationMsg = {
+              pollCreationMessage: {
+                options: entry.options.map((name: string) => ({ optionName: name })),
+              },
+            };
 
-          // Build a synthetic poll creation message from our stored option names.
-          // getAggregateVotesInPollMessage only needs options[].optionName to map
-          // SHA-256 hashes back to option names, which we already have.
-          const fakeCreationMsg = {
-            pollCreationMessage: {
-              options: entry.options.map((name: string) => ({ optionName: name })),
-            },
-          };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const aggregated: { name: string; voters: string[] }[] =
+              getAggregateVotesInPollMessage(
+                { message: fakeCreationMsg, pollUpdates: entry.pollUpdates },
+                sock.user?.id
+              );
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const aggregated: { name: string; voters: string[] }[] =
-            getAggregateVotesInPollMessage(
-              { message: fakeCreationMsg, pollUpdates: entry.pollUpdates },
-              sock.user?.id
+            const voterVotes = new Map<string, number[]>();
+            for (let i = 0; i < aggregated.length; i++) {
+              for (const voter of aggregated[i].voters) {
+                if (!voterVotes.has(voter)) voterVotes.set(voter, []);
+                voterVotes.get(voter)!.push(i);
+              }
+            }
+            this.liveVotes.set(pollMsgId, voterVotes);
+
+            const votedIndices = voterVotes.get(voterJid) ?? [];
+            console.log(
+              `[WA] Poll ${pollMsgId.slice(0, 8)} — ${voterJid.split("@")[0]} voted:`,
+              votedIndices,
+              "| totals:", aggregated.map((a) => `${a.name}:${a.voters.length}`)
             );
 
-          // Rebuild voterMap: voterJid → [optionIndices they voted for]
-          const voterVotes = new Map<string, number[]>();
-          for (let i = 0; i < aggregated.length; i++) {
-            for (const voter of aggregated[i].voters) {
-              if (!voterVotes.has(voter)) voterVotes.set(voter, []);
-              voterVotes.get(voter)!.push(i);
-            }
+            fetch(
+              `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_poll_votes`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+                },
+                body: JSON.stringify({
+                  p_wa_message_id: pollMsgId,
+                  p_voter_jid: voterJid,
+                  p_option_indices: votedIndices,
+                }),
+              }
+            ).catch((e) => console.error("[WA] vote persist error:", e));
+            continue; // poll vote handled — skip text capture below
           }
-          this.liveVotes.set(pollMsgId, voterVotes);
 
-          const votedIndices = voterVotes.get(voterJid) ?? [];
+          // ── Text message capture ────────────────────────────────────────
+          // Only process freshly-received group messages, not history loads
+          if (type !== "notify") continue;
+          const remoteJid: string = msg.key?.remoteJid ?? "";
+          if (!remoteJid.endsWith("@g.us")) continue;
+
+          const content: string =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            "";
+          if (!content.trim()) continue;
+          if (msg.message?.pollCreationMessage) continue;
+
+          const groupId = await this._getGroupIdForJid(userId, remoteJid);
+          if (!groupId) continue;
+
+          const senderJid: string = msg.key?.participant || remoteJid;
+          const senderName: string =
+            (msg.pushName as string | undefined) ||
+            senderJid.split("@")[0] ||
+            "Unknown";
+          const isFromMe: boolean = msg.key?.fromMe ?? false;
+          const waMessageId: string | null = msg.key?.id ?? null;
+
           console.log(
-            `[WA] Poll ${pollMsgId.slice(0, 8)} — ${voterJid.split("@")[0]} voted:`,
-            votedIndices,
-            "| totals:", aggregated.map((a) => `${a.name}:${a.voters.length}`)
+            `[WA] Message in ${remoteJid.split("@")[0]} from ${senderName}: ${content.slice(0, 40)}`
           );
 
-          // Persist to Supabase via SECURITY DEFINER RPC (works with anon key)
           fetch(
-            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_poll_votes`,
+            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/store_wa_message`,
             {
               method: "POST",
               headers: {
@@ -242,12 +285,16 @@ class WhatsAppManager {
                 apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
               },
               body: JSON.stringify({
-                p_wa_message_id: pollMsgId,
-                p_voter_jid: voterJid,
-                p_option_indices: votedIndices,
+                p_group_id: groupId,
+                p_wa_jid: remoteJid,
+                p_sender_jid: senderJid,
+                p_sender_name: senderName,
+                p_content: content.trim(),
+                p_is_from_me: isFromMe,
+                p_wa_message_id: waMessageId,
               }),
             }
-          ).catch((e) => console.error("[WA] vote persist error:", e));
+          ).catch((e) => console.error("[WA] message store error:", e));
         }
       });
     } catch (err) {
@@ -256,6 +303,32 @@ class WhatsAppManager {
       this.sessions.delete(userId);
     } finally {
       this.starting.delete(userId);
+    }
+  }
+
+  /** Look up the app group_id linked to a WA JID for a given user. Cached. */
+  private async _getGroupIdForJid(userId: string, waJid: string): Promise<string | null> {
+    const cacheKey = `${userId}:${waJid}`;
+    const cached = this.groupLinkCache.get(cacheKey);
+    if (cached) return cached;
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/whatsapp_group_links` +
+          `?wa_jid=eq.${encodeURIComponent(waJid)}&user_id=eq.${userId}&select=group_id&limit=1`,
+        {
+          headers: {
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""}`,
+          },
+        }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const groupId: string | null = data[0]?.group_id ?? null;
+      if (groupId) this.groupLinkCache.set(cacheKey, groupId);
+      return groupId;
+    } catch {
+      return null;
     }
   }
 
