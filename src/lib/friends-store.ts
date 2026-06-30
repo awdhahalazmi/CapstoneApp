@@ -20,7 +20,7 @@ export function useFriends() {
       }
       const { data } = await supabase
         .from("friendships")
-        .select("friend:profiles!friendships_friend_id_fkey(id, name, username)")
+        .select("friend:profiles!friendships_friend_id_fkey(id, name, username, availability_status)")
         .eq("user_id", uid)
         .eq("status", "accepted");
       if (!active) return;

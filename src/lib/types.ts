@@ -50,6 +50,7 @@ export type GroupMember = {
   id: string; // profile id
   name: string;
   username: string | null;
+  availability_status?: "available" | "not_in_the_mood";
 };
 
 export type Group = {

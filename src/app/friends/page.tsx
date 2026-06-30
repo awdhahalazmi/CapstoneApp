@@ -5,7 +5,7 @@ import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import { ArrowLeftIcon, SearchIcon, UserPlusIcon, CheckIcon, XIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase/client";
-import { useSession } from "@/lib/supabase/use-session";
+import { useSession, useProfile } from "@/lib/supabase/use-session";
 import { avatarFor } from "@/lib/avatar";
 
 type Profile = { id: string; username: string | null; name: string };
@@ -13,6 +13,7 @@ type FriendRow = { user_id: string; friend_id: string; status: string; other: Pr
 
 export default function FriendsPage() {
   const session = useSession();
+  const { profile } = useProfile();
   const uid = session?.user?.id ?? null;
 
   const [query, setQuery] = useState("");
@@ -72,18 +73,30 @@ export default function FriendsPage() {
   async function sendInvite(p: Profile) {
     if (!uid) return;
     await supabase.from("friendships").insert({ user_id: uid, friend_id: p.id, status: "pending" });
+    const senderName = profile?.name ?? profile?.username ?? "Someone";
+    await supabase.from("notifications").insert({
+      user_id: p.id,
+      message: `${senderName} sent you a friend request`,
+      kind: "ping",
+      read: false,
+    });
     await loadRows();
   }
 
   async function accept(row: FriendRow) {
-    // Update row to accepted
     await supabase.from("friendships").update({ status: "accepted" })
       .eq("user_id", row.user_id).eq("friend_id", row.friend_id);
-    // Insert reverse so both sides see each other as friends
     await supabase.from("friendships").upsert(
       { user_id: row.friend_id, friend_id: row.user_id, status: "accepted" },
       { onConflict: "user_id,friend_id" }
     );
+    const accepterName = profile?.name ?? profile?.username ?? "Someone";
+    await supabase.from("notifications").insert({
+      user_id: row.user_id,
+      message: `${accepterName} accepted your friend request`,
+      kind: "ping",
+      read: false,
+    });
     await loadRows();
   }
 
@@ -152,8 +165,23 @@ export default function FriendsPage() {
           )}
         </div>
 
+        {/* Self-search hint */}
+        {q.length >= 2 && q === (profile?.username ?? "").toLowerCase() && (
+          <p className="text-[13px] font-medium text-primary">
+            That&apos;s your own username — try searching for someone else.
+          </p>
+        )}
+
+        {/* Already-a-friend hint */}
+        {q.length >= 2 && q !== (profile?.username ?? "").toLowerCase() &&
+          acceptedFriends.some((r) => r.other.username?.toLowerCase() === q) && (
+          <p className="text-[13px] font-medium text-primary">
+            @{q} is already your friend.
+          </p>
+        )}
+
         {/* Search results */}
-        {q.length >= 2 && (
+        {q.length >= 2 && q !== (profile?.username ?? "").toLowerCase() && (
           <section>
             <h2 className="mb-3 text-sm font-bold">Results</h2>
             {searchResults.length === 0 ? (

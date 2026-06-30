@@ -230,17 +230,12 @@ export default function ProfilePage() {
             <p className="text-sm text-on-surface-variant">No interests yet — tap Edit to add some.</p>
           ) : (
             <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-              {interests.map((interest, i) => {
+              {interests.map((interest) => {
                 const emoji = INTEREST_EMOJIS[interest];
-                const isFirst = i === 0;
                 return (
                   <span
                     key={interest}
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-semibold ${
-                      isFirst
-                        ? "bg-primary text-on-primary"
-                        : "bg-surface-low text-on-surface-variant"
-                    }`}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-3 py-2 text-[13px] font-semibold text-primary"
                   >
                     {emoji && <span aria-hidden>{emoji}</span>}
                     {interest}
