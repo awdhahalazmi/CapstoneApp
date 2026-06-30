@@ -14,6 +14,125 @@ export type Database = {
   }
   public: {
     Tables: {
+      group_messages: {
+        Row: {
+          id: string
+          group_id: string
+          sender_id: string
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          sender_id: string
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          sender_id?: string
+          content?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      group_places: {
+        Row: {
+          id: string
+          group_id: string
+          added_by: string
+          added_by_name: string
+          title: string
+          description: string | null
+          category: string
+          lat: number
+          lng: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          added_by: string
+          added_by_name: string
+          title: string
+          description?: string | null
+          category?: string
+          lat: number
+          lng: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          added_by?: string
+          added_by_name?: string
+          title?: string
+          description?: string | null
+          category?: string
+          lat?: number
+          lng?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      place_votes: {
+        Row: {
+          place_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          place_id: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          place_id?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      group_availability: {
+        Row: {
+          id: string
+          group_id: string
+          user_id: string
+          user_name: string
+          date: string
+          time_slot: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          user_id: string
+          user_name: string
+          date: string
+          time_slot: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          user_id?: string
+          user_name?: string
+          date?: string
+          time_slot?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       friendships: {
         Row: {
           created_at: string
@@ -117,6 +236,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_group_links: {
+        Row: {
+          id: string
+          user_id: string
+          wa_jid: string
+          wa_name: string
+          wa_participant_count: number
+          group_id: string
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          wa_jid: string
+          wa_name: string
+          wa_participant_count?: number
+          group_id: string
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          wa_jid?: string
+          wa_name?: string
+          wa_participant_count?: number
+          group_id?: string
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_polls: {
+        Row: {
+          id: string
+          group_id: string
+          wa_jid: string
+          wa_message_id: string | null
+          question: string
+          options: string[]
+          vote_counts: Record<string, number>
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          wa_jid: string
+          wa_message_id?: string | null
+          question: string
+          options: string[]
+          vote_counts?: Record<string, number>
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          wa_jid?: string
+          wa_message_id?: string | null
+          question?: string
+          options?: string[]
+          vote_counts?: Record<string, number>
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
