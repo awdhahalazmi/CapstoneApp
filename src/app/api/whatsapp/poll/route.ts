@@ -4,7 +4,7 @@ import { waManager } from "@/lib/whatsapp/manager";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const { userId, waJid, question, options, announcementText, groupId } =
+  const { userId, waJid, question, options, announcementText } =
     await req.json();
 
   if (!userId || !waJid || !question || !options?.length) {
@@ -19,15 +19,11 @@ export async function POST(req: NextRequest) {
     await waManager.sendText(userId, waJid, announcementText);
   }
 
-  const messageId = await waManager.sendPoll(userId, waJid, question, options);
+  // sendPoll registers the poll (encKey + creator identity) internally, keyed by groupId === waJid.
+  const { messageId, encKeyBase64 } = await waManager.sendPoll(userId, waJid, question, options);
   if (!messageId) {
     return NextResponse.json({ error: "Failed to send poll" }, { status: 500 });
   }
 
-  // Register poll so incoming votes can be decoded (SHA-256 option matching)
-  if (groupId) {
-    waManager.registerPoll(messageId, groupId, options);
-  }
-
-  return NextResponse.json({ messageId });
+  return NextResponse.json({ messageId, encKeyBase64 });
 }

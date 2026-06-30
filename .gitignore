@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# whatsapp session credentials (contain auth/encryption keys — never commit)
+/.wa-sessions/
+
+# local claude code tooling state
+/.claude/

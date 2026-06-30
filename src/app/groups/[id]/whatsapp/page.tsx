@@ -7,19 +7,9 @@ import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/use-session";
 import { useGroups } from "@/lib/groups-store";
 import { ArrowLeftIcon, PlusIcon, XIcon } from "@/components/icons";
+import type { WAInMemoryMessage } from "@/lib/whatsapp/manager";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-type WAMessage = {
-  id: string;
-  group_id: string;
-  wa_jid: string;
-  sender_jid: string;
-  sender_name: string;
-  content: string;
-  is_from_me: boolean;
-  wa_message_id: string | null;
-  created_at: string;
-};
+type WALink = { waJid: string; waName: string; participantCount: number };
 
 type WAPoll = {
   id: string;
@@ -30,246 +20,237 @@ type WAPoll = {
   created_at: string;
 };
 
-type WALink = {
-  waJid: string;
-  waName: string;
-  participantCount: number;
-};
+type ChatItem =
+  | { kind: "msg"; ts: number; data: WAInMemoryMessage }
+  | { kind: "poll"; ts: number; data: WAPoll };
 
-type Tab = "chat" | "polls";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function fmt(tsMs: number) {
+  return new Date(tsMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
-}
-
-// ── LinearProgress ────────────────────────────────────────────────────────────
-function LinearProgress({ value, winner }: { value: number; winner: boolean }) {
-  return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/12">
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${winner ? "bg-primary" : "bg-primary/40"}`}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-      />
-    </div>
-  );
+function fmtDay(tsMs: number) {
+  const d = new Date(tsMs);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" });
 }
 
-// ── PollCard ──────────────────────────────────────────────────────────────────
-function PollCard({
-  poll,
-  liveVotes,
-}: {
-  poll: WAPoll;
-  liveVotes: Record<string, Record<string, number>>;
-}) {
-  const counts =
-    poll.wa_message_id && liveVotes[poll.wa_message_id]
-      ? liveVotes[poll.wa_message_id]
-      : poll.vote_counts ?? {};
+// ── Message bubble ─────────────────────────────────────────────────────────────
+function MessageBubble({ msg, prevMsg }: { msg: WAInMemoryMessage; prevMsg?: WAInMemoryMessage }) {
+  const isMe = msg.isFromMe;
+  const isSameSender = prevMsg?.senderJid === msg.senderJid && prevMsg?.msgType !== "reaction";
+  const initials = (msg.senderName || "??").slice(0, 2).toUpperCase();
 
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const maxCount = Math.max(...poll.options.map((_, i) => counts[String(i)] ?? 0), 0);
-
-  return (
-    <div className="overflow-hidden rounded-2xl bg-surface-container">
-      {/* Header */}
-      <div className="px-5 pt-4 pb-2">
-        <p className="text-[15px] font-semibold leading-snug text-on-surface">
-          {poll.question}
-        </p>
-        <p className="mt-0.5 text-[11px] text-on-surface-variant">
-          {formatDate(poll.created_at)}
-          {total > 0 && ` · ${total} vote${total !== 1 ? "s" : ""}`}
-        </p>
+  if (msg.msgType === "reaction") {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"} px-3 mt-0.5`}>
+        <span className="text-[18px] opacity-70">{msg.reactionEmoji}</span>
       </div>
+    );
+  }
 
-      {/* Options */}
-      <div className="space-y-2 px-5 pb-5 pt-2">
-        {poll.options.map((opt, i) => {
-          const count = counts[String(i)] ?? 0;
-          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-          const isWinner = total > 0 && count === maxCount && count > 0;
-          return (
-            <div key={i}>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <span
-                  className={`flex items-center gap-1 text-[13px] ${
-                    isWinner
-                      ? "font-semibold text-primary"
-                      : "text-on-surface"
-                  }`}
-                >
-                  {isWinner && <span className="text-[11px]">🏆</span>}
-                  {opt}
-                </span>
-                <span
-                  className={`shrink-0 text-[12px] font-medium tabular-nums ${
-                    isWinner ? "text-primary" : "text-on-surface-variant"
-                  }`}
-                >
-                  {pct}% · {count}
-                </span>
-              </div>
-              <LinearProgress value={pct} winner={isWinner} />
+  return (
+    <div className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} ${isSameSender ? "mt-0.5" : "mt-3"}`}>
+      {!isMe && (
+        <div className="w-8 shrink-0 self-end">
+          {!isSameSender && (
+            <div className="grid h-8 w-8 place-items-center rounded-full bg-surface-container-high text-[10px] font-bold text-on-surface-variant">
+              {initials}
             </div>
-          );
-        })}
+          )}
+        </div>
+      )}
+      <div className={`flex max-w-[78%] flex-col gap-0.5 ${isMe ? "items-end" : "items-start"}`}>
+        {!isMe && !isSameSender && (
+          <span className="ml-1 text-[11px] font-medium text-on-surface-variant">{msg.senderName}</span>
+        )}
+
+        {/* Sticker — no bubble */}
+        {msg.msgType === "sticker" ? (
+          <div className="flex flex-col items-end gap-0.5">
+            {msg.mediaBase64
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={msg.mediaBase64} alt="sticker" className="h-24 w-24 object-contain" />
+              : <div className="grid h-24 w-24 place-items-center text-5xl">🎭</div>}
+            <span className="mx-1 text-[10px] text-on-surface-variant/50">{fmt(msg.timestampMs)}</span>
+          </div>
+        ) : (
+          <div className={`px-3.5 py-2.5 text-[14px] leading-relaxed ${isMe ? "rounded-[20px] rounded-br-[4px] bg-primary text-on-primary" : "rounded-[20px] rounded-bl-[4px] bg-surface-container text-on-surface"}`}>
+
+            {/* Quote */}
+            {msg.quotedText && (
+              <div className={`mb-1.5 rounded-lg border-l-[3px] px-2 py-1 ${isMe ? "border-white/50 bg-white/10" : "border-primary/50 bg-primary/8"}`}>
+                {msg.quotedSenderName && <p className={`mb-0.5 text-[10px] font-semibold ${isMe ? "text-white/70" : "text-primary"}`}>{msg.quotedSenderName}</p>}
+                <p className={`line-clamp-2 text-[11px] ${isMe ? "text-white/60" : "text-on-surface/60"}`}>{msg.quotedText}</p>
+              </div>
+            )}
+
+            {/* Image */}
+            {msg.msgType === "image" && (
+              <div className="mb-1.5">
+                {msg.mediaBase64
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={msg.mediaBase64} alt="photo" className="max-h-48 w-full rounded-xl object-cover" />
+                  : <div className="flex h-36 items-center justify-center rounded-xl bg-black/20 text-4xl">📷</div>}
+                {msg.text && <p className="mt-1.5">{msg.text}</p>}
+              </div>
+            )}
+
+            {/* Video */}
+            {msg.msgType === "video" && (
+              <div className="relative mb-1.5">
+                {msg.mediaBase64
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={msg.mediaBase64} alt="video thumb" className="max-h-48 w-full rounded-xl object-cover" />
+                  : <div className="flex h-36 items-center justify-center rounded-xl bg-black/20 text-4xl">🎬</div>}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="grid h-12 w-12 place-items-center rounded-full bg-black/40 text-white text-xl">▶</div>
+                </div>
+                {msg.text && <p className="mt-1.5">{msg.text}</p>}
+              </div>
+            )}
+
+            {/* Audio */}
+            {msg.msgType === "audio" && (
+              <div className="flex min-w-[160px] items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/20 text-[20px]">🎵</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 20 }).map((_, i) => (
+                      <div key={i} className="w-0.5 rounded-full bg-current opacity-50" style={{ height: `${6 + Math.sin(i * 1.3) * 4}px` }} />
+                    ))}
+                  </div>
+                  <p className="mt-0.5 text-[10px] opacity-60">Voice message</p>
+                </div>
+              </div>
+            )}
+
+            {/* Document */}
+            {msg.msgType === "document" && (
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/20 text-xl">📄</div>
+                <p className="truncate text-[13px]">{msg.text || "Document"}</p>
+              </div>
+            )}
+
+            {/* Location */}
+            {msg.msgType === "location" && (
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">📍</span>
+                <p className="text-[13px]">{msg.text || "Location"}</p>
+              </div>
+            )}
+
+            {/* Poll */}
+            {msg.msgType === "poll" && (() => {
+              const counts = msg.pollVotes ?? {};
+              const total = Object.values(counts).reduce((a, b) => a + b, 0);
+              const maxCount = Math.max(...(msg.pollOptions ?? []).map((_, i) => counts[String(i)] ?? 0), 0);
+              return (
+                <div className="min-w-[200px]">
+                  <div className="mb-2.5 flex items-center gap-1.5">
+                    <span className="text-[16px]">📊</span>
+                    <span className="text-[14px] font-semibold">{msg.text}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {(msg.pollOptions ?? []).map((opt, i) => {
+                      const count = counts[String(i)] ?? 0;
+                      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                      const isWinner = total > 0 && count === maxCount && count > 0;
+                      return (
+                        <div key={i}>
+                          <div className="mb-0.5 flex items-center justify-between gap-2">
+                            <span className={`text-[12px] ${isWinner ? "font-semibold" : ""}`}>{isWinner ? "🏆 " : ""}{opt}</span>
+                            <span className="shrink-0 text-[11px] tabular-nums opacity-70">{pct}%</span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-current/15">
+                            <div className={`h-full rounded-full transition-all duration-500 ${isWinner ? "bg-current" : "bg-current/40"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-[10px] opacity-50">
+                    {total > 0 ? `${total} vote${total !== 1 ? "s" : ""}` : "No votes yet"} · Vote on WhatsApp
+                  </p>
+                </div>
+              );
+            })()}
+
+            {/* Plain text */}
+            {msg.msgType === "text" && <span>{msg.text}</span>}
+
+            {/* Timestamp */}
+            <div className="mt-1 flex justify-end">
+              <span className={`text-[10px] ${isMe ? "text-on-primary/60" : "text-on-surface-variant/50"}`}>{fmt(msg.timestampMs)}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── CreatePollSheet ────────────────────────────────────────────────────────────
-function CreatePollSheet({
-  groupId,
-  userId,
-  waJid,
-  onCreated,
-  onClose,
-}: {
-  groupId: string;
-  userId: string;
-  waJid: string | null;
-  onCreated: (p: WAPoll) => void;
-  onClose: () => void;
+// ── Create Poll Sheet ──────────────────────────────────────────────────────────
+function CreatePollSheet({ groupId, userId, waJid, onClose }: {
+  groupId: string; userId: string; waJid: string | null; onClose: () => void;
 }) {
-  const { profile } = useProfile();
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
   const [sending, setSending] = useState(false);
-
-  const validOptions = options.filter((o) => o.trim());
+  const valid = options.filter(o => o.trim());
 
   async function submit() {
-    if (!question.trim() || validOptions.length < 2 || !profile) return;
+    if (!question.trim() || valid.length < 2 || !waJid) return;
     setSending(true);
     try {
-      const cleanOpts = validOptions.map((o) => o.trim());
-      let messageId: string | null = null;
-
-      if (waJid) {
-        const res = await fetch("/api/whatsapp/poll", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            waJid,
-            groupId,
-            question: question.trim(),
-            options: cleanOpts,
-          }),
+      const cleanOpts = valid.map(o => o.trim());
+      const res = await fetch("/api/whatsapp/poll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, waJid, groupId, question: question.trim(), options: cleanOpts }),
+      });
+      const r = await res.json();
+      if (r.messageId) {
+        // Also save to Supabase for the polls page
+        const encKeyBase64 = r.encKeyBase64 ?? null;
+        await supabase.from("whatsapp_polls").insert({
+          group_id: groupId, wa_jid: waJid, wa_message_id: r.messageId,
+          enc_key: encKeyBase64, question: question.trim(), options: cleanOpts,
+          vote_counts: {}, created_by: userId,
         });
-        const r = await res.json();
-        messageId = r.messageId ?? null;
       }
-
-      const { data } = await supabase
-        .from("whatsapp_polls")
-        .insert({
-          group_id: groupId,
-          wa_jid: waJid as string,
-          wa_message_id: messageId,
-          question: question.trim(),
-          options: cleanOpts,
-          vote_counts: {},
-          created_by: userId,
-        })
-        .select()
-        .single();
-
-      if (data) onCreated(data as WAPoll);
       onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSending(false);
-    }
+    } catch (err) { console.error(err); } finally { setSending(false); }
   }
 
   return (
     <>
-      <div
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/32 backdrop-blur-[2px]"
-      />
+      <div onClick={onClose} className="fixed inset-0 z-40 bg-black/32 backdrop-blur-[2px]" />
       <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-surface-container pb-safe">
-        <div className="flex justify-center pt-3 pb-5">
-          <div className="h-1 w-8 rounded-full bg-on-surface-variant/30" />
-        </div>
+        <div className="flex justify-center pt-3 pb-5"><div className="h-1 w-8 rounded-full bg-on-surface-variant/30" /></div>
         <div className="overflow-y-auto px-6 pb-8">
-          <h2 className="mb-6 text-[24px] font-normal text-on-surface">
-            Create poll
-          </h2>
-          <input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask the group something…"
-            autoFocus
-            className="w-full rounded-[4px] border border-outline bg-transparent px-4 py-3 text-[15px] text-on-surface placeholder:text-on-surface-variant/50 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-          />
-          <p className="mb-3 mt-5 text-[12px] font-medium uppercase tracking-[0.1em] text-on-surface-variant">
-            Options
-          </p>
+          <h2 className="mb-6 text-[24px] font-normal text-on-surface">Create poll</h2>
+          <input value={question} onChange={e => setQuestion(e.target.value)} placeholder="Ask the group something…" autoFocus className="w-full rounded-[4px] border border-outline bg-transparent px-4 py-3 text-[15px] text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50" />
+          <p className="mb-3 mt-5 text-[12px] font-medium uppercase tracking-[0.1em] text-on-surface-variant">Options</p>
           <div className="space-y-3">
             {options.map((opt, i) => (
               <div key={i} className="flex items-center gap-2">
-                <input
-                  value={opt}
-                  onChange={(e) => {
-                    const next = [...options];
-                    next[i] = e.target.value;
-                    setOptions(next);
-                  }}
-                  placeholder={`Option ${i + 1}`}
-                  className="flex-1 rounded-[4px] border border-outline bg-transparent px-4 py-3 text-[15px] text-on-surface placeholder:text-on-surface-variant/50 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-                {options.length > 2 && (
-                  <button
-                    onClick={() =>
-                      setOptions(options.filter((_, j) => j !== i))
-                    }
-                    className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-on-surface/8"
-                  >
-                    <XIcon className="h-4 w-4" />
-                  </button>
-                )}
+                <input value={opt} onChange={e => { const n = [...options]; n[i] = e.target.value; setOptions(n); }} placeholder={`Option ${i + 1}`} className="flex-1 rounded-[4px] border border-outline bg-transparent px-4 py-3 text-[15px] text-on-surface outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-on-surface-variant/50" />
+                {options.length > 2 && <button onClick={() => setOptions(options.filter((_, j) => j !== i))} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-on-surface-variant"><XIcon className="h-4 w-4" /></button>}
               </div>
             ))}
           </div>
-          {options.length < 10 && (
-            <button
-              onClick={() => setOptions([...options, ""])}
-              className="mt-4 flex items-center gap-1 rounded-full px-3 py-2.5 text-[14px] font-medium text-primary hover:bg-primary/8"
-            >
-              <PlusIcon className="h-4 w-4" /> Add option
-            </button>
-          )}
-          {waJid && (
-            <div className="mt-4 flex items-center gap-2 rounded-full border border-[#25d366]/40 bg-[#25d366]/8 px-4 py-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-[#25d366]" />
-              <span className="text-[11px] font-medium text-[#128c7e]">
-                Will be sent to WhatsApp group
-              </span>
-            </div>
-          )}
+          {options.length < 10 && <button onClick={() => setOptions([...options, ""])} className="mt-4 flex items-center gap-1 rounded-full px-3 py-2.5 text-[14px] font-medium text-primary"><PlusIcon className="h-4 w-4" /> Add option</button>}
+          <div className="mt-4 flex items-center gap-2 rounded-full border border-[#25d366]/40 bg-[#25d366]/8 px-4 py-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-[#25d366]" />
+            <span className="text-[11px] font-medium text-[#128c7e]">Sends to WhatsApp group</span>
+          </div>
           <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="rounded-full px-6 py-2.5 text-[14px] font-medium text-primary hover:bg-primary/8"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={submit}
-              disabled={
-                sending || !question.trim() || validOptions.length < 2
-              }
-              className="rounded-full bg-primary px-6 py-2.5 text-[14px] font-medium text-on-primary shadow-sm disabled:opacity-40"
-            >
+            <button onClick={onClose} className="rounded-full px-6 py-2.5 text-[14px] font-medium text-primary">Cancel</button>
+            <button onClick={submit} disabled={sending || !question.trim() || valid.length < 2 || !waJid} className="rounded-full bg-primary px-6 py-2.5 text-[14px] font-medium text-on-primary shadow-sm disabled:opacity-40">
               {sending ? "Sending…" : "Send poll"}
             </button>
           </div>
@@ -279,57 +260,46 @@ function CreatePollSheet({
   );
 }
 
-// ── Message bubble ─────────────────────────────────────────────────────────────
-function MessageBubble({
-  msg,
-  prevMsg,
-}: {
-  msg: WAMessage;
-  prevMsg: WAMessage | undefined;
-}) {
-  const isMe = msg.is_from_me;
-  const isSameSender = prevMsg?.sender_jid === msg.sender_jid;
-  const initials = msg.sender_name.slice(0, 2).toUpperCase() || "??";
-
+// ── Poll bubble (for DB-sourced polls) ────────────────────────────────────────
+function PollBubble({ poll }: { poll: WAPoll }) {
+  const counts = poll.vote_counts ?? {};
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const maxCount = Math.max(...poll.options.map((_, i) => counts[String(i)] ?? 0), 0);
   return (
-    <div
-      className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : "flex-row"} ${
-        isSameSender ? "mt-0.5" : "mt-3"
-      }`}
-    >
-      {/* Avatar placeholder for left-side messages */}
-      {!isMe && (
-        <div className="w-8 shrink-0 self-end">
-          {!isSameSender ? (
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-surface-container-high text-[10px] font-bold text-on-surface-variant">
-              {initials}
-            </div>
-          ) : null}
+    <div className="mt-3 flex justify-start pl-10">
+      <div className="max-w-[80%] overflow-hidden rounded-[20px] rounded-bl-[4px] bg-surface-container">
+        <div className="flex items-center gap-2 border-b border-outline-variant/20 px-4 py-3">
+          <span className="text-[18px]">📊</span>
+          <div>
+            <p className="text-[14px] font-semibold text-on-surface">{poll.question}</p>
+            <p className="text-[11px] text-on-surface-variant">
+              {total > 0 ? `${total} vote${total !== 1 ? "s" : ""}` : "No votes yet"} · Vote on WhatsApp
+            </p>
+          </div>
         </div>
-      )}
-
-      <div
-        className={`flex max-w-[76%] flex-col gap-0.5 ${
-          isMe ? "items-end" : "items-start"
-        }`}
-      >
-        {!isMe && !isSameSender && (
-          <span className="ml-1 text-[11px] font-medium text-on-surface-variant">
-            {msg.sender_name}
-          </span>
-        )}
-        <div
-          className={`px-4 py-2.5 text-[14px] leading-relaxed ${
-            isMe
-              ? "rounded-[20px] rounded-br-[4px] bg-primary text-on-primary"
-              : "rounded-[20px] rounded-bl-[4px] bg-surface-container text-on-surface"
-          }`}
-        >
-          {msg.content}
+        <div className="space-y-2.5 px-4 py-3">
+          {poll.options.map((opt, i) => {
+            const count = counts[String(i)] ?? 0;
+            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            const isWinner = total > 0 && count === maxCount && count > 0;
+            return (
+              <div key={i}>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className={`flex items-center gap-1 text-[13px] ${isWinner ? "font-semibold text-primary" : "text-on-surface"}`}>
+                    {isWinner && "🏆 "}{opt}
+                  </span>
+                  <span className={`ml-2 shrink-0 text-[11px] tabular-nums ${isWinner ? "text-primary" : "text-on-surface-variant"}`}>{pct}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-on-surface/8">
+                  <div className={`h-full rounded-full transition-all duration-500 ${isWinner ? "bg-primary" : "bg-primary/35"}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <span className="mx-1 text-[10px] text-on-surface-variant/50">
-          {formatTime(msg.created_at)}
-        </span>
+        <div className="px-4 pb-2.5 text-right">
+          <span className="text-[10px] text-on-surface-variant/50">{fmt(new Date(poll.created_at).getTime())}</span>
+        </div>
       </div>
     </div>
   );
@@ -341,323 +311,197 @@ export default function WAGroupPage() {
   const groupId = params.id;
   const { groups } = useGroups();
   const { profile } = useProfile();
-  const group = groups.find((g) => g.id === groupId);
+  const group = groups.find(g => g.id === groupId);
 
-  const [tab, setTab] = useState<Tab>("chat");
   const [waLink, setWaLink] = useState<WALink | null>(null);
-  const [messages, setMessages] = useState<WAMessage[]>([]);
+  const [waStatus, setWaStatus] = useState<string>("idle");
+  const [messages, setMessages] = useState<WAInMemoryMessage[]>([]);
   const [polls, setPolls] = useState<WAPoll[]>([]);
-  const [liveVotes, setLiveVotes] = useState<
-    Record<string, Record<string, number>>
-  >({});
-  const [loadingMsgs, setLoadingMsgs] = useState(true);
-  const [loadingPolls, setLoadingPolls] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-
   const endRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(0);
 
-  const scrollToBottom = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    endRef.current?.scrollIntoView({ behavior });
   }, []);
 
-  // Show toast helper
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
-
-  // ── Load WA link info ──────────────────────────────────────────────────────
+  // Load WA link + check connection status
   useEffect(() => {
     if (!profile?.id || !groupId) return;
-    supabase
-      .from("whatsapp_group_links")
-      .select("wa_jid, wa_name, wa_participant_count")
-      .eq("group_id", groupId)
-      .eq("user_id", profile.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data)
-          setWaLink({
-            waJid: data.wa_jid,
-            waName: data.wa_name,
-            participantCount: data.wa_participant_count ?? 0,
-          });
-      });
+    supabase.from("whatsapp_group_links").select("wa_jid, wa_name, wa_participant_count")
+      .eq("group_id", groupId).eq("user_id", profile.id).maybeSingle()
+      .then(({ data }) => { if (data) setWaLink({ waJid: data.wa_jid, waName: data.wa_name, participantCount: data.wa_participant_count ?? 0 }); });
   }, [profile?.id, groupId]);
 
-  // ── Load messages ──────────────────────────────────────────────────────────
+  // Poll WA connection status every 3s
+  useEffect(() => {
+    if (!profile?.id) return;
+    const check = () =>
+      fetch(`/api/whatsapp/status?userId=${profile.id}`)
+        .then(r => r.json()).then(d => setWaStatus(d.status ?? "idle")).catch(() => {});
+    check();
+    const id = setInterval(check, 3_000);
+    return () => clearInterval(id);
+  }, [profile?.id]);
+
+  // Load DB polls (and refresh vote_counts every 3s)
   useEffect(() => {
     if (!groupId) return;
-    setLoadingMsgs(true);
-    supabase
-      .from("wa_messages")
-      .select("*")
-      .eq("group_id", groupId)
-      .order("created_at", { ascending: true })
-      .limit(100)
-      .then(({ data }) => {
-        setMessages((data ?? []) as WAMessage[]);
-        setLoadingMsgs(false);
-      });
+    const load = () =>
+      supabase.from("whatsapp_polls").select("*").eq("group_id", groupId).order("created_at", { ascending: true })
+        .then(({ data }) => { if (data) setPolls(data as WAPoll[]); setLoading(false); });
+    load();
+    const id = setInterval(load, 3_000);
+    return () => clearInterval(id);
   }, [groupId]);
 
-  // ── Realtime subscription for new WA messages ──────────────────────────────
+  // Poll Baileys messages every 2s
   useEffect(() => {
-    if (!groupId) return;
-    const uid = Math.random().toString(36).slice(2);
-    const channel = supabase
-      .channel(`wa-msgs-${groupId}-${uid}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "wa_messages",
-          filter: `group_id=eq.${groupId}`,
-        },
-        (payload) => {
-          const m = payload.new as WAMessage;
-          setMessages((prev) => {
-            if (prev.some((x) => x.id === m.id)) return prev;
-            return [...prev, m];
-          });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [groupId]);
-
-  // ── Scroll to bottom when messages update ─────────────────────────────────
-  useEffect(() => {
-    if (tab === "chat") scrollToBottom();
-  }, [messages, tab, scrollToBottom]);
-
-  // ── Load polls ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!groupId) return;
-    setLoadingPolls(true);
-    supabase
-      .from("whatsapp_polls")
-      .select("*")
-      .eq("group_id", groupId)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        setPolls((data ?? []) as WAPoll[]);
-        setLoadingPolls(false);
-      });
-  }, [groupId]);
-
-  // ── Live vote polling every 3 s ────────────────────────────────────────────
-  useEffect(() => {
-    if (!groupId) return;
+    if (!profile?.id || !waLink?.waJid) return;
     const tick = async () => {
       try {
-        const res = await fetch(
-          `/api/whatsapp/poll-results?groupId=${groupId}`
-        );
+        const res = await fetch(`/api/whatsapp/messages?userId=${profile.id}&waJid=${encodeURIComponent(waLink.waJid)}&limit=200`);
         if (res.ok) {
-          const { votes } = await res.json();
-          if (Object.keys(votes).length > 0) setLiveVotes(votes);
+          const { messages: m } = await res.json();
+          setMessages(m ?? []);
+          setLoading(false);
+          if ((m ?? []).length > prevCountRef.current) {
+            prevCountRef.current = (m ?? []).length;
+            setTimeout(() => scrollToBottom("smooth"), 50);
+          }
         }
       } catch { /* ignore */ }
     };
     tick();
-    const id = setInterval(tick, 3_000);
+    const id = setInterval(tick, 2_000);
     return () => clearInterval(id);
-  }, [groupId]);
+  }, [profile?.id, waLink?.waJid, scrollToBottom]);
 
-  const userId = profile?.id ?? "";
+  // Fallback: stop loading after 5s
+  useEffect(() => { const t = setTimeout(() => setLoading(false), 5_000); return () => clearTimeout(t); }, []);
+
+  // Initial scroll
+  useEffect(() => { if (!loading) scrollToBottom("instant" as ScrollBehavior); }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build merged, sorted timeline — dedupe polls that also appear as Baileys messages
+  const baileysIds = new Set(messages.filter(m => m.msgType === "poll").map(m => m.id));
+  const chatItems: ChatItem[] = [
+    ...messages.map(m => ({ kind: "msg" as const, ts: m.timestampMs, data: m })),
+    // Only include DB polls that didn't come through Baileys (no duplicate)
+    ...polls.filter(p => !p.wa_message_id || !baileysIds.has(p.wa_message_id))
+            .map(p => ({ kind: "poll" as const, ts: new Date(p.created_at).getTime(), data: p })),
+  ].sort((a, b) => a.ts - b.ts);
+
+  function renderItems() {
+    const nodes: React.ReactNode[] = [];
+    let lastDay = "";
+    let prevMsg: WAInMemoryMessage | undefined;
+
+    for (let i = 0; i < chatItems.length; i++) {
+      const item = chatItems[i];
+      const day = fmtDay(item.ts);
+      if (day !== lastDay) {
+        lastDay = day;
+        nodes.push(
+          <div key={`day-${day}-${i}`} className="my-3 flex items-center gap-3">
+            <div className="flex-1 h-px bg-outline-variant/30" />
+            <span className="rounded-full bg-surface-container px-3 py-1 text-[11px] text-on-surface-variant">{day}</span>
+            <div className="flex-1 h-px bg-outline-variant/30" />
+          </div>
+        );
+      }
+      if (item.kind === "poll") {
+        nodes.push(<PollBubble key={`poll-${item.data.id}`} poll={item.data} />);
+        prevMsg = undefined;
+      } else {
+        nodes.push(<MessageBubble key={item.data.id} msg={item.data} prevMsg={prevMsg} />);
+        prevMsg = item.data;
+      }
+    }
+    return nodes;
+  }
 
   return (
     <div className="flex h-[100dvh] flex-col bg-surface">
-
-      {/* ── Header ── */}
+      {/* Header */}
       <header className="sticky top-0 z-20 shrink-0 border-b border-outline-variant/20 bg-surface/95 backdrop-blur-md">
         <div className="flex items-center gap-1 px-2 py-2">
-          <Link
-            href={`/groups/${groupId}`}
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-on-surface hover:bg-on-surface/8"
-          >
+          <Link href={`/groups/${groupId}`} className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
             <ArrowLeftIcon />
           </Link>
-
-          {/* Group info */}
           <div className="min-w-0 flex-1 px-1">
             <h1 className="truncate text-[17px] font-semibold text-on-surface">
               {group ? `${group.emoji} ${group.name}` : "WhatsApp Group"}
             </h1>
-            {waLink && (
-              <p className="truncate text-[12px] text-on-surface-variant">
-                {waLink.waName}
-                {waLink.participantCount > 0 &&
-                  ` · ${waLink.participantCount} members`}
-              </p>
-            )}
+            {waLink && <p className="truncate text-[12px] text-on-surface-variant">{waLink.waName}{waLink.participantCount > 0 && ` · ${waLink.participantCount} members`}</p>}
           </div>
-
-          {/* WA indicator */}
-          <div className="flex items-center gap-2 rounded-full border border-[#25d366]/30 bg-[#25d366]/8 px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#25d366]" />
-            <span className="text-[11px] font-medium text-[#128c7e]">WA</span>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex">
-          {(["chat", "polls"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-2.5 text-[13px] font-medium transition-colors ${
-                tab === t
-                  ? "border-b-2 border-primary text-primary"
-                  : "border-b-2 border-transparent text-on-surface-variant"
-              }`}
-            >
-              {t === "chat" ? "💬 Chat" : "📊 Polls"}
-            </button>
-          ))}
+          {waStatus === "connected" ? (
+            <div className="flex items-center gap-1.5 rounded-full border border-[#25d366]/30 bg-[#25d366]/8 px-3 py-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#25d366]" />
+              <span className="text-[11px] font-medium text-[#128c7e]">Live</span>
+            </div>
+          ) : (
+            <Link href="/groups" className="flex items-center gap-1.5 rounded-full border border-orange-300/40 bg-orange-50 px-3 py-1.5">
+              <span className="h-2 w-2 rounded-full bg-orange-400" />
+              <span className="text-[11px] font-medium text-orange-600">Reconnect</span>
+            </Link>
+          )}
         </div>
       </header>
 
-      {/* ── Tab content ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* Reconnect banner */}
+      {waStatus !== "connected" && waStatus !== "connecting" && (
+        <Link href="/groups" className="shrink-0 bg-orange-50 border-b border-orange-200 px-4 py-2.5 flex items-center gap-2">
+          <span className="text-base">⚠️</span>
+          <p className="text-[12px] text-orange-700 flex-1">WhatsApp disconnected — tap to scan QR and reconnect</p>
+          <span className="text-[11px] font-medium text-orange-600">→</span>
+        </Link>
+      )}
 
-        {/* Chat tab */}
-        {tab === "chat" && (
-          <div className="px-3 pb-6 pt-3">
-            {loadingMsgs ? (
-              <div className="space-y-3 py-4">
-                {[80, 130, 70, 110, 90].map((w, i) => (
-                  <div
-                    key={i}
-                    className={`flex ${i % 2 === 0 ? "justify-start" : "justify-end"}`}
-                  >
-                    <div
-                      className="h-10 animate-pulse rounded-2xl bg-surface-container"
-                      style={{ width: w }}
-                    />
-                  </div>
-                ))}
+      {/* Chat */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6 pt-2">
+        {loading ? (
+          <div className="space-y-3 py-4">
+            {[80, 130, 70, 110, 90].map((w, i) => (
+              <div key={i} className={`flex ${i % 2 === 0 ? "justify-start" : "justify-end"}`}>
+                <div className="h-10 animate-pulse rounded-2xl bg-surface-container" style={{ width: w }} />
               </div>
-            ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-24 text-center">
-                <div className="grid h-20 w-20 place-items-center rounded-full bg-surface-container text-4xl">
-                  💬
-                </div>
-                <p className="text-[18px] font-normal text-on-surface">
-                  No messages yet
-                </p>
-                <p className="max-w-[260px] text-[13px] text-on-surface-variant">
-                  New messages sent in the WhatsApp group will appear here
-                  automatically once the server captures them.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                {messages.map((msg, idx) => (
-                  <MessageBubble
-                    key={msg.id}
-                    msg={msg}
-                    prevMsg={messages[idx - 1]}
-                  />
-                ))}
-              </div>
-            )}
-            <div ref={endRef} />
+            ))}
           </div>
-        )}
-
-        {/* Polls tab */}
-        {tab === "polls" && (
-          <div className="px-4 pb-32 pt-3">
-            {loadingPolls ? (
-              <div className="space-y-4">
-                {[1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="h-40 animate-pulse rounded-2xl bg-surface-container"
-                  />
-                ))}
-              </div>
-            ) : polls.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-24 text-center">
-                <div className="grid h-20 w-20 place-items-center rounded-full bg-surface-container text-4xl">
-                  📊
-                </div>
-                <p className="text-[18px] font-normal text-on-surface">
-                  No polls yet
-                </p>
-                <p className="max-w-[240px] text-[13px] text-on-surface-variant">
-                  Create a poll and your group votes directly in WhatsApp.
-                </p>
-                <button
-                  onClick={() => setShowCreate(true)}
-                  className="mt-2 rounded-full bg-primary px-6 py-2.5 text-[13px] font-medium text-on-primary shadow-sm"
-                >
-                  Create first poll
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {polls.map((poll) => (
-                  <PollCard key={poll.id} poll={poll} liveVotes={liveVotes} />
-                ))}
-              </div>
-            )}
+        ) : chatItems.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-24 text-center">
+            <div className="grid h-20 w-20 place-items-center rounded-full bg-surface-container text-4xl">💬</div>
+            <p className="text-[18px] font-normal text-on-surface">No activity yet</p>
+            <p className="max-w-[260px] text-[13px] text-on-surface-variant">
+              Messages sent in the WhatsApp group will appear here live.
+            </p>
           </div>
+        ) : (
+          <div>{renderItems()}</div>
         )}
+        <div ref={endRef} />
       </div>
 
-      {/* ── Bottom action bar (polls tab) ── */}
-      {tab === "polls" && (
-        <div className="shrink-0 border-t border-outline-variant/20 bg-surface px-4 py-3 pb-safe">
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 text-[14px] font-medium text-on-primary shadow-sm active:scale-[0.98]"
-            >
-              <PlusIcon className="h-4 w-4" /> Create Poll
-            </button>
-            <button
-              onClick={() => showToast("Events coming soon!")}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface active:scale-[0.98]"
-            >
-              📅 Create Event
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── FAB (chat tab) ── */}
-      {tab === "chat" && (
-        <div className="fixed bottom-24 right-4 z-30">
+      {/* Bottom bar */}
+      <div className="shrink-0 border-t border-outline-variant/20 bg-surface px-4 py-3 pb-safe">
+        <div className="flex gap-3">
           <button
             onClick={() => setShowCreate(true)}
-            className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-[0_4px_16px_rgba(0,0,0,0.18)] transition active:scale-95"
-            aria-label="Create poll"
-            title="Create poll"
+            disabled={!waLink}
+            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 text-[14px] font-medium text-on-primary shadow-sm active:scale-[0.98] disabled:opacity-40"
           >
-            <PlusIcon className="h-6 w-6" />
+            <PlusIcon className="h-4 w-4" /> Create Poll
+          </button>
+          <button className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface active:scale-[0.98]">
+            📅 Create Event
           </button>
         </div>
-      )}
+      </div>
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div className="fixed bottom-28 left-1/2 z-50 -translate-x-1/2 rounded-full bg-gray-900/90 px-5 py-2.5 text-[13px] font-medium text-white shadow-lg">
-          {toast}
-        </div>
-      )}
-
-      {/* ── Create Poll Sheet ── */}
-      {showCreate && (
+      {showCreate && waLink && (
         <CreatePollSheet
-          groupId={groupId}
-          userId={userId}
-          waJid={waLink?.waJid ?? null}
-          onCreated={(p) => setPolls((prev) => [p, ...prev])}
+          groupId={groupId} userId={profile?.id ?? ""} waJid={waLink.waJid}
           onClose={() => setShowCreate(false)}
         />
       )}

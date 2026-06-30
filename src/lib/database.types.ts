@@ -273,6 +273,7 @@ export type Database = {
           group_id: string
           wa_jid: string
           wa_message_id: string | null
+          enc_key: string | null
           question: string
           options: string[]
           vote_counts: Record<string, number>
@@ -284,6 +285,7 @@ export type Database = {
           group_id: string
           wa_jid: string
           wa_message_id?: string | null
+          enc_key?: string | null
           question: string
           options: string[]
           vote_counts?: Record<string, number>
@@ -295,6 +297,7 @@ export type Database = {
           group_id?: string
           wa_jid?: string
           wa_message_id?: string | null
+          enc_key?: string | null
           question?: string
           options?: string[]
           vote_counts?: Record<string, number>
