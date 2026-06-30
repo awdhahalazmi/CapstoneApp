@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/use-session";
 import { useGroups } from "@/lib/groups-store";
-import { ArrowLeftIcon, PlusIcon, SendIcon, XIcon } from "@/components/icons";
+import { ArrowLeftIcon, PlusIcon, SendIcon, StickerIcon, XIcon } from "@/components/icons";
 import type { WAInMemoryMessage } from "@/lib/whatsapp/manager";
 
 type WALink = { waJid: string; waName: string; participantCount: number };
@@ -74,7 +74,12 @@ function MessageBubble({ msg, prevMsg }: { msg: WAInMemoryMessage; prevMsg?: WAI
             {msg.mediaBase64
               // eslint-disable-next-line @next/next/no-img-element
               ? <img src={msg.mediaBase64} alt="sticker" className="h-24 w-24 object-contain" />
-              : <div className="grid h-24 w-24 place-items-center text-5xl">🎭</div>}
+              : (
+                <div className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-2xl bg-surface-container text-on-surface-variant">
+                  <StickerIcon className="h-7 w-7 opacity-60" />
+                  <span className="text-[10px] font-medium opacity-60">Sticker</span>
+                </div>
+              )}
             <span className="mx-1 text-[10px] text-on-surface-variant/50">{fmt(msg.timestampMs)}</span>
           </div>
         ) : (

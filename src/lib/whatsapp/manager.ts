@@ -498,6 +498,20 @@ class WhatsAppManager {
           };
           this._storeMessage(userId, session, remoteJid, entry);
           count++;
+
+          // Async: upgrade historical sticker thumbnails to full WebP
+          if (parsed.msgType === "sticker") {
+            const histRemoteJid = remoteJid;
+            const histMsgId = entry.id;
+            downloadMediaMessage(msg, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage })
+              .then((buf: Buffer) => {
+                const msgs = session.waMessages.get(histRemoteJid);
+                const stored = msgs?.find((m) => m.id === histMsgId);
+                if (stored) stored.mediaBase64 = `data:image/webp;base64,${buf.toString("base64")}`;
+                this._scheduleSave(userId, histRemoteJid, session);
+              })
+              .catch(() => { /* keep thumbnail */ });
+          }
         }
         for (const [jid, msgs] of session.waMessages) {
           msgs.sort((a, b) => a.timestampMs - b.timestampMs);
@@ -554,11 +568,12 @@ class WhatsAppManager {
 
           // Async: upgrade sticker to full WebP
           if (parsed.msgType === "sticker") {
-            downloadMediaMessage(msg, "buffer", {})
+            downloadMediaMessage(msg, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage })
               .then((buf: Buffer) => {
                 const msgs = session.waMessages.get(remoteJid);
                 const stored = msgs?.find((m) => m.id === msgId);
                 if (stored) stored.mediaBase64 = `data:image/webp;base64,${buf.toString("base64")}`;
+                this._scheduleSave(userId, remoteJid, session);
               })
               .catch(() => { /* keep thumbnail */ });
           }

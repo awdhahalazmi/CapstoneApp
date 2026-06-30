@@ -265,6 +265,16 @@ export function ClockIcon(props: IconProps) {
   );
 }
 
+export function StickerIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M14.5 3.5h-7A4 4 0 0 0 3.5 7.5v9a4 4 0 0 0 4 4h6.34a4 4 0 0 0 2.83-1.17l3.66-3.66a4 4 0 0 0 1.17-2.83V7.5a4 4 0 0 0-4-4z" />
+      <path d="M20.5 14H17a3 3 0 0 0-3 3v3.5" />
+      <circle cx="8.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function ListIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
