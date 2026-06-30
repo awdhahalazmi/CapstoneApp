@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
-import { ArrowLeftIcon, PencilIcon, GlobeIcon, LockIcon, PinIcon } from "@/components/icons";
+import { ArrowLeftIcon, PencilIcon, GlobeIcon, LockIcon, PinIcon, ChatIcon } from "@/components/icons";
 import { useGroups } from "@/lib/groups-store";
 import { avatarFor } from "@/lib/avatar";
 
@@ -55,20 +55,34 @@ export default function GroupViewPage() {
         </div>
       </div>
 
-      {/* Shared map */}
-      <Link
-        href={`/groups/${group.id}/map`}
-        className="mx-5 mt-4 flex items-center gap-3 overflow-hidden rounded-lg bg-card p-4 shadow-soft transition active:scale-[0.99]"
-      >
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-gradient-to-br from-primary to-primary-container text-on-primary">
-          <PinIcon className="h-6 w-6" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="font-bold">Group map</p>
-          <p className="text-[13px] text-on-surface-variant">Drop pins, save places & vote together</p>
-        </div>
-        <span className="text-on-surface-variant">›</span>
-      </Link>
+      {/* Quick actions */}
+      <div className="mx-5 mt-4 grid grid-cols-2 gap-3">
+        <Link
+          href={`/groups/${group.id}/chat`}
+          className="flex items-center gap-3 overflow-hidden rounded-lg bg-card p-4 shadow-soft transition active:scale-[0.99]"
+        >
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-gradient-to-br from-primary to-primary-container text-on-primary">
+            <ChatIcon className="h-6 w-6" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">Chat</p>
+            <p className="text-[12px] text-on-surface-variant">Decide together</p>
+          </div>
+        </Link>
+
+        <Link
+          href={`/groups/${group.id}/map`}
+          className="flex items-center gap-3 overflow-hidden rounded-lg bg-card p-4 shadow-soft transition active:scale-[0.99]"
+        >
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-gradient-to-br from-tertiary-container to-tertiary text-on-tertiary">
+            <PinIcon className="h-6 w-6" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold">Map</p>
+            <p className="text-[12px] text-on-surface-variant">Save places</p>
+          </div>
+        </Link>
+      </div>
 
       {/* Members */}
       <section className="px-5 pt-6">
