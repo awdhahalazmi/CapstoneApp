@@ -290,15 +290,11 @@ export default function GroupHubPage() {
         style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
       >
         <div className="text-7xl drop-shadow-lg">{group.emoji}</div>
-        <div className="ml-4 pb-1">
+        <div className="ml-4 pb-1 flex-1 min-w-0">
           <h2 className="text-[28px] font-normal leading-tight text-white drop-shadow">
             {group.name}
           </h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[12px] font-medium text-white backdrop-blur-sm">
-              {group.isPublic ? <GlobeIcon className="h-3 w-3" /> : <LockIcon className="h-3 w-3" />}
-              {group.isPublic ? "Public" : "Private"}
-            </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[12px] font-medium text-white backdrop-blur-sm">
               👥 {group.members.length} {group.members.length === 1 ? "member" : "members"}
             </span>
@@ -309,56 +305,53 @@ export default function GroupHubPage() {
               </span>
             )}
           </div>
+          {/* Interests */}
+          {group.interests.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {group.interests.map((interest) => (
+                <span key={interest} className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm">
+                  {interest}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="space-y-6 px-4 pt-5">
 
-        {/* ── Quick Action Buttons ─────────────────────────────── */}
+        {/* ── Plan Outing CTA ─────────────────────────────── */}
         <section>
-          <div className="grid grid-cols-2 gap-3">
-            {/* Polls */}
+          <Link
+            href={`/groups/${group.id}/ai-plan`}
+            className="flex items-center gap-4 rounded-3xl bg-gradient-to-r from-primary to-violet-500 px-5 py-4 shadow-[0_8px_24px_rgba(124,58,237,0.3)] transition active:scale-[0.98]"
+          >
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-2xl">
+              ✨
+            </div>
+            <div className="flex-1">
+              <p className="text-[16px] font-semibold text-white">Plan Outing</p>
+              <p className="text-[12px] text-white/70">AI picks the best spots for your group</p>
+            </div>
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-white/60">
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+            </svg>
+          </Link>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
             <Link
               href={`/groups/${group.id}/plan`}
-              className="flex flex-col items-center gap-2 rounded-2xl bg-primary/8 px-3 py-4 text-center transition active:scale-[0.97] active:bg-primary/14"
-            >
-              <div className="grid h-11 w-11 place-items-center rounded-full bg-primary/12 text-2xl">
-                📊
-              </div>
-              <span className="text-[13px] font-semibold text-primary">Polls</span>
-            </Link>
-
-            {/* Plan AI */}
-            <Link
-              href={`/groups/${group.id}/ai-plan`}
-              className="flex flex-col items-center gap-2 rounded-2xl bg-gradient-to-b from-primary/10 to-primary/5 px-3 py-4 text-center transition active:scale-[0.97]"
-            >
-              <div className="grid h-11 w-11 place-items-center rounded-full bg-primary/12 text-2xl">
-                ✨
-              </div>
-              <span className="text-[13px] font-semibold text-primary">Plan AI</span>
-            </Link>
-
-            {/* Plan From Places */}
-            <Link
-              href={`/groups/${group.id}/plan-places`}
               className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container px-3 py-4 text-center transition active:scale-[0.97] active:bg-surface-high"
             >
-              <div className="grid h-11 w-11 place-items-center rounded-full bg-on-surface/8 text-2xl">
-                🗺️
-              </div>
-              <span className="text-[13px] font-semibold text-on-surface">Plan Places</span>
+              <div className="grid h-11 w-11 place-items-center rounded-full bg-primary/10 text-2xl">📊</div>
+              <span className="text-[13px] font-semibold text-on-surface">Vote History</span>
             </Link>
-
-            {/* Chat */}
             <Link
-              href={`/groups/${group.id}/chat`}
+              href={`/groups/${group.id}/edit`}
               className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container px-3 py-4 text-center transition active:scale-[0.97] active:bg-surface-high"
             >
-              <div className="grid h-11 w-11 place-items-center rounded-full bg-on-surface/8 text-2xl">
-                💬
-              </div>
-              <span className="text-[13px] font-semibold text-on-surface">Chat</span>
+              <div className="grid h-11 w-11 place-items-center rounded-full bg-on-surface/8 text-2xl">👥</div>
+              <span className="text-[13px] font-semibold text-on-surface">Members</span>
             </Link>
           </div>
         </section>
@@ -493,28 +486,6 @@ export default function GroupHubPage() {
             </div>
           </section>
         )}
-
-        {/* ── Chat section ─────────────────────────────── */}
-        <section>
-          <h2 className="mb-3 text-[16px] font-medium text-on-surface">Chat</h2>
-          <Link
-            href={`/groups/${group.id}/chat`}
-            className="flex items-center gap-4 rounded-2xl bg-surface-container px-4 py-4 transition active:bg-surface-high"
-          >
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/12 text-2xl">
-              💬
-            </div>
-            <div className="flex-1">
-              <p className="text-[15px] font-medium text-on-surface">Group Chat</p>
-              <p className="text-[12px] text-on-surface-variant">
-                {waJid && waConnected ? "Bridged to WhatsApp" : "Chat with your group"}
-              </p>
-            </div>
-            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-on-surface-variant/40">
-              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
-            </svg>
-          </Link>
-        </section>
 
         {/* ── Members section ───────────────────────────── */}
         <section>

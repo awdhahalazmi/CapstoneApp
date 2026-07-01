@@ -34,10 +34,34 @@ export default function EditGroupPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [interests, setInterests] = useState<Set<string> | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const INTEREST_OPTIONS = [
+    { key: "Cafés", emoji: "☕" },
+    { key: "Restaurants", emoji: "🍽️" },
+    { key: "Cinema", emoji: "🎬" },
+    { key: "Outdoors", emoji: "🏖️" },
+    { key: "Gaming", emoji: "🎮" },
+    { key: "Shopping", emoji: "🛍️" },
+    { key: "Nightlife", emoji: "🎵" },
+    { key: "Sports", emoji: "⚽" },
+    { key: "Culture", emoji: "🎨" },
+    { key: "Fast Food", emoji: "🍕" },
+  ];
 
   const group = groups.find((g) => g.id === params.id);
   const myAv = avatarFor({ id: profile?.id, name: profile?.name, username: profile?.username });
+
+  // Initialise interests from group once loaded
+  const activeInterests = interests ?? new Set(group?.interests ?? []);
+
+  async function toggleInterest(key: string) {
+    const next = new Set(activeInterests);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    setInterests(next);
+    if (group) await updateGroup(group.id, { interests: [...next] });
+  }
 
   // Search profiles by username
   useEffect(() => {
@@ -189,6 +213,36 @@ export default function EditGroupPage() {
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          {/* Interests */}
+          <div className="rounded-2xl bg-card p-4 shadow-soft">
+            <p className="mb-1 font-bold">Group Interests</p>
+            <p className="mb-3 text-[13px] text-on-surface-variant">
+              Used by AI to suggest places. Tap to toggle.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {INTEREST_OPTIONS.map(({ key, emoji }) => {
+                const active = activeInterests.has(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleInterest(key)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-all active:scale-95 ${
+                      active
+                        ? "bg-primary text-on-primary shadow-sm"
+                        : "bg-surface-container text-on-surface-variant"
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    <span>{key}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {activeInterests.size === 0 && (
+              <p className="mt-2 text-[12px] text-amber-600">Pick at least one so AI can suggest places.</p>
             )}
           </div>
 

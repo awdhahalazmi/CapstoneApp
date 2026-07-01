@@ -93,36 +93,14 @@ export async function handlePlanCommand(
   inProgress.add(groupJid);
 
   try {
-    await wa.sendText(userId, groupJid, `🤖 Finding the best spots for *${groupName}*…`);
-
-    // Get AI suggestions
-    const suggestion = await askAI(groupName);
-
-    // Send ONE places poll
-    const question = `Where should we go? 📍`;
-    const options = suggestion.places.map((p) => p.name);
-    const { messageId } = await wa.sendPoll(userId, groupJid, question, options);
-
-    // Resolve group_id and persist poll so it appears in the Beyond Kw app
-    const links = await sbGet(
-      `whatsapp_group_links?wa_jid=eq.${encodeURIComponent(groupJid)}&select=group_id,user_id&limit=1`,
+    // Direct members to the app — the app is the single source of truth for polls
+    await wa.sendText(
+      userId,
+      groupJid,
+      `🗺️ *Plan Outing — ${groupName}*\n\nOpen the *Beyond Kw* app → Groups → Plan Outing to see real Kuwait spots chosen for your group's interests.\n\nVote there and the AI will automatically pick the winner and create an event! 🎉`,
     );
-    const groupId: string | null = (links?.[0] as { group_id?: string })?.group_id ?? null;
-    const createdBy: string | null = (links?.[0] as { user_id?: string })?.user_id ?? userId;
 
-    if (groupId && createdBy) {
-      await sbInsert("whatsapp_polls", {
-        group_id: groupId,
-        wa_jid: groupJid,
-        wa_message_id: messageId,
-        question,
-        options,
-        vote_counts: {},
-        created_by: createdBy,
-      });
-    }
-
-    console.log(`[WA] /plan completed for ${groupJid}`);
+    console.log(`[WA] /plan redirected to app for ${groupJid}`);
   } catch (err) {
     console.error("[WA] /plan error:", err);
     try {

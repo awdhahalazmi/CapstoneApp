@@ -178,6 +178,8 @@ class WhatsAppManager {
   private sessions = new Map<string, Session>();
   private sessionsDir = path.join(process.cwd(), ".wa-sessions");
   private pollRegistry = new Map<string, PollEntry>();
+  private sentPlacesForPoll = new Set<string>();
+  private autoEventCreatedForPoll = new Set<string>();
   private starting = new Set<string>();
   // pending file-save timers per (userId+jid)
   private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -322,6 +324,155 @@ class WhatsAppManager {
       headers: { "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "" },
       body: JSON.stringify({ p_wa_message_id: pollMsgId, p_vote_counts: voteCounts }),
     }).catch((e) => console.error("[WA] vote persist error:", e));
+
+    // If this is a /plan poll, send Google Places recommendations for the leader
+    this._maybeSendPlacesRecommendation(userId, remoteJid, pollMsgId, voteCounts, entry.options);
+
+    // Auto-create event server-side when votes reach threshold
+    this._maybeAutoCreateEvent(userId, remoteJid, pollMsgId, voteCounts);
+  }
+
+  private _maybeSendPlacesRecommendation(
+    userId: string,
+    groupJid: string,
+    pollMsgId: string,
+    voteCounts: Record<string, number>,
+    options: string[],
+  ): void {
+    if (this.sentPlacesForPoll.has(pollMsgId)) return;
+    const totalVotes = Object.values(voteCounts).reduce((a, b) => a + b, 0);
+    if (totalVotes < 1) return;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+    const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? anonKey;
+
+    fetch(`${supabaseUrl}/rest/v1/whatsapp_polls?wa_message_id=eq.${encodeURIComponent(pollMsgId)}&select=source&limit=1`, {
+      headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` },
+    })
+      .then((r) => r.json())
+      .then(async (rows: { source?: string }[]) => {
+        if (rows[0]?.source !== "plan_command") return;
+        if (this.sentPlacesForPoll.has(pollMsgId)) return;
+        this.sentPlacesForPoll.add(pollMsgId);
+
+        // Pick the leading option
+        let winnerIdx = 0;
+        let maxVotes = -1;
+        for (const [idx, count] of Object.entries(voteCounts)) {
+          if (count > maxVotes) { maxVotes = count; winnerIdx = Number(idx); }
+        }
+        const winner = options[winnerIdx] ?? options[0];
+        if (!winner) return;
+
+        console.log(`[WA] /plan poll winner: "${winner}" — fetching Google Places`);
+
+        const placesRes = await fetch(`${supabaseUrl}/functions/v1/google-places`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${anonKey}`, apikey: anonKey },
+          body: JSON.stringify({ query: winner, maxResults: 4 }),
+        });
+        if (!placesRes.ok) { console.error("[WA] google-places error:", placesRes.status); return; }
+
+        const { places } = await placesRes.json() as { places?: { name: string; address: string; rating?: number; price?: string; openNow?: boolean | null }[] };
+        if (!places?.length) return;
+
+        const lines: string[] = [
+          `🗺️ *"${winner}" — real spots nearby:*\n`,
+          ...places.map((p, i) => {
+            const stars = p.rating ? ` ★ ${p.rating.toFixed(1)}` : "";
+            const price = p.price ? ` · ${p.price}` : "";
+            const open = p.openNow === true ? " · Open ✅" : p.openNow === false ? " · Closed ❌" : "";
+            return `${i + 1}. *${p.name}*${stars}${price}${open}\n   📍 ${p.address}`;
+          }),
+        ];
+        await this.sendText(userId, groupJid, lines.join("\n"));
+      })
+      .catch((e) => console.error("[WA] places recommendation error:", e));
+  }
+
+  private _maybeAutoCreateEvent(
+    userId: string,
+    groupJid: string,
+    pollMsgId: string,
+    voteCounts: Record<string, number>,
+  ): void {
+    const total = Object.values(voteCounts).reduce((a, b) => a + b, 0);
+    if (total < 2) return;
+    if (this.autoEventCreatedForPoll.has(pollMsgId)) return;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+
+    type PollDbRow = {
+      id: string;
+      source?: string;
+      group_id: string;
+      created_by: string;
+      metadata?: { place_cards?: { name: string }[] } | null;
+    };
+
+    fetch(
+      `${supabaseUrl}/rest/v1/whatsapp_polls?wa_message_id=eq.${encodeURIComponent(pollMsgId)}&select=id,source,group_id,created_by,metadata&limit=1`,
+      { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } },
+    )
+      .then((r) => r.json())
+      .then(async (rows: PollDbRow[]) => {
+        const poll = rows[0];
+        if (!poll || poll.source !== "plan_command") return;
+        if (this.autoEventCreatedForPoll.has(pollMsgId)) return;
+
+        // Pick winner index
+        let winnerIdx = 0;
+        let maxVotes = -1;
+        for (const [idx, count] of Object.entries(voteCounts)) {
+          if (count > maxVotes) { maxVotes = count; winnerIdx = Number(idx); }
+        }
+        const placeCards = poll.metadata?.place_cards ?? [];
+        const winner = placeCards[winnerIdx]?.name ?? placeCards[0]?.name;
+        if (!winner) return;
+
+        // Guard: check if an event already exists for this poll
+        const existsRes = await fetch(
+          `${supabaseUrl}/rest/v1/events?source_poll_id=eq.${encodeURIComponent(poll.id)}&select=id&limit=1`,
+          { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } },
+        );
+        const existing = await existsRes.json() as { id: string }[];
+        if (existing.length > 0) {
+          this.autoEventCreatedForPoll.add(pollMsgId);
+          return;
+        }
+
+        this.autoEventCreatedForPoll.add(pollMsgId);
+
+        // Create the event
+        await fetch(`${supabaseUrl}/rest/v1/events`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: svcKey,
+            Authorization: `Bearer ${svcKey}`,
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify({
+            group_id: poll.group_id,
+            created_by: poll.created_by,
+            title: `Group Outing — ${winner}`,
+            place_name: winner,
+            source_poll_id: poll.id,
+          }),
+        });
+
+        console.log(`[WA] Auto-created event for poll ${pollMsgId.slice(0, 8)}: "${winner}"`);
+
+        // Notify the WhatsApp group
+        await this.sendText(
+          userId,
+          groupJid,
+          `🎉 *AI picked the winner!*\n\n📍 *${winner}*\n\nThe group is going here! Open the Beyond Kw app to see the event details. 🗺️`,
+        );
+      })
+      .catch((e) => console.error("[WA] auto event creation error:", e));
   }
 
   async startSession(userId: string): Promise<void> {

@@ -27,6 +27,29 @@ export default function SelectGroupsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [interests, setInterests] = useState<Set<string>>(new Set());
+  const [showInterests, setShowInterests] = useState(false);
+
+  const INTEREST_OPTIONS = [
+    { key: "Cafés", emoji: "☕" },
+    { key: "Restaurants", emoji: "🍽️" },
+    { key: "Cinema", emoji: "🎬" },
+    { key: "Outdoors", emoji: "🏖️" },
+    { key: "Gaming", emoji: "🎮" },
+    { key: "Shopping", emoji: "🛍️" },
+    { key: "Nightlife", emoji: "🎵" },
+    { key: "Sports", emoji: "⚽" },
+    { key: "Culture", emoji: "🎨" },
+    { key: "Fast Food", emoji: "🍕" },
+  ];
+
+  function toggleInterest(key: string) {
+    setInterests((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -76,13 +99,14 @@ export default function SelectGroupsPage() {
         if (!waGroup) continue;
 
         // 1. Create app group
-        const { data: group } = await supabase
-          .from("groups")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: group } = await (supabase.from("groups") as any)
           .insert({
             name: waGroup.name,
             emoji: pickEmoji(jid),
             owner_id: userId,
             is_public: false,
+            interests: [...interests],
           })
           .select()
           .single();
@@ -144,11 +168,11 @@ export default function SelectGroupsPage() {
         </div>
         {newSelections.length > 0 && (
           <button
-            onClick={syncSelected}
+            onClick={() => setShowInterests(true)}
             disabled={saving}
             className="btn-primary h-10 px-4 text-sm disabled:opacity-50"
           >
-            {saving ? "Syncing…" : `Sync ${newSelections.length}`}
+            Next →
           </button>
         )}
       </header>
@@ -186,9 +210,7 @@ export default function SelectGroupsPage() {
                   onClick={() => !linked && toggle(g.id)}
                   disabled={linked}
                   className={`flex w-full items-center gap-3 rounded-2xl p-4 transition active:scale-[0.99] ${
-                    checked
-                      ? "bg-primary/10 ring-1 ring-primary/30"
-                      : "bg-card shadow-soft"
+                    checked ? "bg-primary/10 ring-1 ring-primary/30" : "bg-card shadow-soft"
                   } ${linked ? "cursor-default opacity-70" : ""}`}
                 >
                   <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#25d366]/10 text-2xl">
@@ -201,11 +223,7 @@ export default function SelectGroupsPage() {
                       {linked && " · Already synced"}
                     </p>
                   </div>
-                  <div
-                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${
-                      checked ? "bg-primary text-on-primary" : "border-2 border-outline-variant"
-                    }`}
-                  >
+                  <div className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${checked ? "bg-primary text-on-primary" : "border-2 border-outline-variant"}`}>
                     {checked && <CheckIcon className="h-3.5 w-3.5" />}
                   </div>
                 </button>
@@ -214,6 +232,60 @@ export default function SelectGroupsPage() {
           })}
         </ul>
       </div>
+
+      {/* ── Interests bottom sheet ── */}
+      {showInterests && (
+        <>
+          <div onClick={() => setShowInterests(false)} className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" />
+          <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[28px] bg-surface-container pb-safe">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-8 rounded-full bg-on-surface-variant/30" />
+            </div>
+            <div className="px-6 pb-8 pt-4">
+              <h2 className="text-[20px] font-semibold text-on-surface">What does this group enjoy?</h2>
+              <p className="mt-1 text-[13px] text-on-surface-variant">
+                AI uses these to suggest the perfect places for your outings.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {INTEREST_OPTIONS.map(({ key, emoji }) => {
+                  const active = interests.has(key);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => toggleInterest(key)}
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium transition-all active:scale-95 ${
+                        active ? "bg-primary text-on-primary shadow-sm" : "bg-surface-high text-on-surface-variant"
+                      }`}
+                    >
+                      <span>{emoji}</span>
+                      <span>{key}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {interests.size === 0 && (
+                <p className="mt-3 text-[12px] text-amber-600">Pick at least one so AI can suggest places.</p>
+              )}
+
+              <button
+                onClick={syncSelected}
+                disabled={saving || interests.size === 0}
+                className="mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-primary to-violet-500 text-[16px] font-semibold text-white shadow-[0_10px_28px_rgba(124,58,237,0.3)] transition active:scale-[0.97] disabled:opacity-50"
+              >
+                {saving ? "Syncing…" : `Sync ${newSelections.length} group${newSelections.length !== 1 ? "s" : ""}`}
+              </button>
+              <button
+                onClick={() => setShowInterests(false)}
+                className="mt-3 w-full py-2 text-center text-[14px] text-on-surface-variant"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
