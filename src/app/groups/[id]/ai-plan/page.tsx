@@ -460,11 +460,11 @@ export default function OutingPlannerPage() {
         newPolls = [p1, p2].filter(Boolean) as PollRow[];
       } else {
         const { data: p1 } = await supabase.from("whatsapp_polls").insert({
-          group_id: params.id, wa_jid: null, wa_message_id: null,
+          group_id: params.id, wa_jid: "", wa_message_id: null,
           question: q1.trim(), options: c1, vote_counts: {}, created_by: userId,
         }).select().single();
         const { data: p2 } = await supabase.from("whatsapp_polls").insert({
-          group_id: params.id, wa_jid: null, wa_message_id: null,
+          group_id: params.id, wa_jid: "", wa_message_id: null,
           question: q2.trim(), options: c2, vote_counts: {}, created_by: userId,
         }).select().single();
         newPolls = [p1, p2].filter(Boolean) as PollRow[];

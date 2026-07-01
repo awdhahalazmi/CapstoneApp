@@ -109,7 +109,7 @@ function QuickPollSheet({
         .from("whatsapp_polls")
         .insert({
           group_id: groupId,
-          wa_jid: waJid ?? null,
+          wa_jid: waJid ?? "",
           wa_message_id: messageId,
           question: question.trim(),
           options: clean.map((o) => o.trim()),
@@ -316,7 +316,7 @@ export default function GroupHubPage() {
 
         {/* ── Quick Action Buttons ─────────────────────────────── */}
         <section>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {/* Polls */}
             <Link
               href={`/groups/${group.id}/plan`}
@@ -339,15 +339,26 @@ export default function GroupHubPage() {
               <span className="text-[13px] font-semibold text-primary">Plan AI</span>
             </Link>
 
-            {/* Create Event */}
+            {/* Plan From Places */}
             <Link
-              href={`/groups/${group.id}/ai-plan`}
+              href={`/groups/${group.id}/plan-places`}
               className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container px-3 py-4 text-center transition active:scale-[0.97] active:bg-surface-high"
             >
               <div className="grid h-11 w-11 place-items-center rounded-full bg-on-surface/8 text-2xl">
-                🗓
+                🗺️
               </div>
-              <span className="text-[13px] font-semibold text-on-surface">Create Event</span>
+              <span className="text-[13px] font-semibold text-on-surface">Plan Places</span>
+            </Link>
+
+            {/* Chat */}
+            <Link
+              href={`/groups/${group.id}/chat`}
+              className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container px-3 py-4 text-center transition active:scale-[0.97] active:bg-surface-high"
+            >
+              <div className="grid h-11 w-11 place-items-center rounded-full bg-on-surface/8 text-2xl">
+                💬
+              </div>
+              <span className="text-[13px] font-semibold text-on-surface">Chat</span>
             </Link>
           </div>
         </section>

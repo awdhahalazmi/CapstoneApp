@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { tool } from "@langchain/core/tools";
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
@@ -248,10 +248,10 @@ const createEventTool = (jwt: string) =>
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENROUTER_API_KEY is not set in .env.local" },
+      { error: "ANTHROPIC_API_KEY is not set in .env.local" },
       { status: 500 },
     );
   }
@@ -271,18 +271,10 @@ export async function POST(req: NextRequest) {
     createEventTool(jwt),
   ];
 
-  const model = new ChatOpenAI({
-    model: "x-ai/grok-4",
+  const model = new ChatAnthropic({
+    model: "claude-haiku-4-5-20251001",
     apiKey,
-    configuration: {
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": "https://beyond-kw.app",
-        "X-Title": "Beyond Kw",
-      },
-    },
-    maxTokens: 500,
-    temperature: 0,
+    maxTokens: 1200,
   }).bindTools(tools);
 
   // Build system prompt

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/use-session";
 import { useGroups } from "@/lib/groups-store";
@@ -315,6 +315,7 @@ function PollBubble({ poll, isMe }: { poll: WAPoll; isMe: boolean }) {
 export default function WAGroupPage() {
   const params = useParams<{ id: string }>();
   const groupId = params.id;
+  const router = useRouter();
   const { groups } = useGroups();
   const { profile } = useProfile();
   const group = groups.find(g => g.id === groupId);
@@ -533,29 +534,28 @@ export default function WAGroupPage() {
             <SendIcon className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             onClick={() => setShowCreate(true)}
             disabled={!waLink}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary py-3 text-[14px] font-medium text-on-primary shadow-sm active:scale-[0.98] disabled:opacity-40"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-3 text-[13px] font-medium text-on-primary shadow-sm active:scale-[0.98] disabled:opacity-40"
           >
-            <PlusIcon className="h-4 w-4" /> Create Poll
+            <PlusIcon className="h-4 w-4" /> Poll
+          </button>
+          <button
+            onClick={() => router.push(`/groups/${groupId}/plan-places`)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary/10 py-3 text-[13px] font-medium text-primary active:scale-[0.98]"
+          >
+            🗺️ Plan Places
           </button>
           {group?.ownerId === profile?.id ? (
             <Link
               href={`/groups/${groupId}/ai-plan`}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface active:scale-[0.98]"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-outline bg-surface py-3 text-[13px] font-medium text-on-surface active:scale-[0.98]"
             >
-              AI Plan Event ✨
+              AI ✨
             </Link>
-          ) : (
-            <button
-              disabled
-              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface-variant opacity-50"
-            >
-              AI Plan Event ✨
-            </button>
-          )}
+          ) : null}
         </div>
       </div>
 

@@ -106,7 +106,7 @@ function CreatePollSheet({
         .from("whatsapp_polls")
         .insert({
           group_id: groupId,
-          wa_jid: waJid ?? null,
+          wa_jid: waJid ?? "",
           wa_message_id: messageId,
           question: question.trim(),
           options: cleanOpts,

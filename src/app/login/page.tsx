@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useSession } from "@/lib/supabase/use-session";
-import { AiIcon, ArrowLeftIcon, XIcon, CheckIcon } from "@/components/icons";
+import { AiIcon, ArrowLeftIcon, XIcon, CheckIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
 import { INTEREST_OPTIONS } from "@/lib/mock-data";
 
 type Mode = "signin" | "signup";
@@ -28,6 +28,9 @@ export default function LoginPage() {
   const [usernameRaw, setUsernameRaw] = useState("");
   const [interests, setInterests] = useState<Set<string>>(new Set());
   const [customInterest, setCustomInterest] = useState("");
+
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const [status, setStatus] = useState<"idle" | "loading" | "check-email">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -188,16 +191,22 @@ export default function LoginPage() {
                 className="input"
                 placeholder="you@email.com"
               />
-              <input
-                type="password"
-                required
-                minLength={6}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                placeholder="Password (6+ characters)"
-              />
+              <div className="relative">
+                <input
+                  type={showPw ? "text" : "password"}
+                  required
+                  minLength={6}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input pr-11"
+                  placeholder="Password (6+ characters)"
+                />
+                <button type="button" onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-outline">
+                  {showPw ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={!emailValid || password.length < 6 || status === "loading"}
@@ -261,15 +270,21 @@ export default function LoginPage() {
                 )}
               </div>
               <div>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onBlur={() => touch("password")}
-                  className="input"
-                  placeholder="Password"
-                />
+                <div className="relative">
+                  <input
+                    type={showPw ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => touch("password")}
+                    className="input pr-11"
+                    placeholder="Password"
+                  />
+                  <button type="button" onClick={() => setShowPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-outline">
+                    {showPw ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  </button>
+                </div>
                 {/* Live password rules */}
                 <ul className="mt-2 space-y-1">
                   {pwRules.map((r) => (
@@ -292,15 +307,21 @@ export default function LoginPage() {
                 </ul>
               </div>
               <div>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  onBlur={() => touch("confirm")}
-                  className="input"
-                  placeholder="Confirm password"
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPw ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onBlur={() => touch("confirm")}
+                    className="input pr-11"
+                    placeholder="Confirm password"
+                  />
+                  <button type="button" onClick={() => setShowConfirmPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-outline">
+                    {showConfirmPw ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  </button>
+                </div>
                 {touched.confirm && confirmError && (
                   <p className="mt-1 text-[12px] text-error">{confirmError}</p>
                 )}
