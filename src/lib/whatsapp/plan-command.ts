@@ -70,7 +70,8 @@ async function sbInsert(table: string, body: Record<string, unknown>): Promise<v
 }
 
 async function askAI(groupName: string): Promise<AISuggestion> {
-  const apiKey = process.env.OPENROUTER_API_KEY ?? "";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
   const prompt =
     `IMPORTANT: Reply with raw JSON only — no markdown, no explanation.\n\n` +
     `Group "${groupName}" in Kuwait wants to plan a group outing.\n` +
@@ -78,24 +79,19 @@ async function askAI(groupName: string): Promise<AISuggestion> {
     `Reply ONLY:\n` +
     `{"outingType":"Café Outing","reason":"Short reason why...","places":[{"name":"Exact Place Name","area":"Area, Kuwait","reason":"Why perfect for a group","emoji":"☕"}]}`;
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  // Route through the Supabase Edge Function which has the OpenRouter key in its secrets
+  const res = await fetch(`${supabaseUrl}/functions/v1/ai-chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://beyond-kw.app",
-      "X-Title": "Beyond Kw",
+      Authorization: `Bearer ${anonKey}`,
+      apikey: anonKey,
     },
-    body: JSON.stringify({
-      model: "x-ai/grok-4",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 400,
-      temperature: 0,
-    }),
+    body: JSON.stringify({ messages: [{ role: "user", content: prompt }] }),
   });
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}`);
-  const data = await res.json() as { choices?: { message?: { content?: string } }[] };
-  const raw = (data.choices?.[0]?.message?.content ?? "").trim()
+  if (!res.ok) throw new Error(`AI function ${res.status}`);
+  const data = await res.json() as { reply?: string };
+  const raw = (data.reply ?? "").trim()
     .replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   return JSON.parse(raw) as AISuggestion;
 }
