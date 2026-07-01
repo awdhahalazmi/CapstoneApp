@@ -106,7 +106,7 @@ function CreatePollSheet({
         .from("whatsapp_polls")
         .insert({
           group_id: groupId,
-          wa_jid: waJid as string,
+          wa_jid: waJid ?? "",
           wa_message_id: messageId,
           question: question.trim(),
           options: cleanOpts,
@@ -240,11 +240,9 @@ function PollCard({
 
   return (
     <div className="rounded-3xl bg-surface-container px-5 py-4">
-      {/* M3 Title Medium */}
       <p className="text-[16px] font-medium leading-snug text-on-surface">
         {poll.question}
       </p>
-      {/* M3 Body Small */}
       <p className="mt-1 text-[12px] text-on-surface-variant">
         {new Date(poll.created_at).toLocaleDateString("en", {
           month: "short",
@@ -333,7 +331,7 @@ export default function GroupPollsPage() {
       {/* M3 Top App Bar — Small */}
       <header className="sticky top-0 z-20 flex items-center gap-2 bg-surface/95 px-2 py-3 backdrop-blur-md">
         <Link
-          href={`/groups/${groupId}`}
+          href="/groups"
           className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8"
         >
           <ArrowLeftIcon />
@@ -359,22 +357,14 @@ export default function GroupPollsPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 pb-32 pt-2">
-        {/* WA not linked notice — M3 Assist Chip style */}
-        {!loading && !waJid && (
-          <Link
-            href="/groups/connect"
-            className="mb-5 flex items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container px-4 py-3"
-          >
-            <span className="text-xl">💬</span>
-            <div>
-              <p className="text-[13px] font-medium text-on-surface">
-                Connect WhatsApp to send polls
-              </p>
-              <p className="text-[12px] text-on-surface-variant">
-                Polls are sent directly to the WA group
-              </p>
-            </div>
-          </Link>
+        {/* WA linked — show a note that polls go to WhatsApp */}
+        {!loading && waJid && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[#25d366]/30 bg-[#25d366]/6 px-4 py-2.5">
+            <span className="text-[13px]">💬</span>
+            <p className="text-[12px] font-medium text-[#128c7e]">
+              Polls are sent directly to your WhatsApp group
+            </p>
+          </div>
         )}
 
         {loading ? (
@@ -394,16 +384,14 @@ export default function GroupPollsPage() {
             <p className="max-w-[240px] text-[14px] text-on-surface-variant">
               {waJid
                 ? "Create a poll and your group can vote directly in WhatsApp."
-                : "Link WhatsApp to start sending polls to your group."}
+                : "Create a poll — your group can vote right inside the app."}
             </p>
-            {waJid && (
-              <button
-                onClick={() => setShowCreate(true)}
-                className="mt-2 rounded-full bg-primary px-6 py-3 text-[14px] font-medium text-on-primary shadow-sm"
-              >
-                Create first poll
-              </button>
-            )}
+            <button
+              onClick={() => setShowCreate(true)}
+              className="mt-2 rounded-full bg-primary px-6 py-3 text-[14px] font-medium text-on-primary shadow-sm"
+            >
+              Create first poll
+            </button>
           </div>
         ) : (
           <div className="space-y-4">

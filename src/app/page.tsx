@@ -48,6 +48,16 @@ type FeedItem = {
   profiles: { name: string | null; username: string | null } | null;
 };
 
+type UpcomingEvent = {
+  id: string;
+  group_id: string;
+  title: string;
+  place_name: string | null;
+  event_date: string | null;
+  event_time: string | null;
+  groups: { name: string; emoji: string } | null;
+};
+
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
   return (
@@ -457,6 +467,33 @@ export default function Home() {
 
   const [featured] = places;
 
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    let active = true;
+    (async () => {
+      const { data: memberRows } = await supabase
+        .from("group_members")
+        .select("group_id")
+        .eq("member_id", profile.id);
+      const groupIds = (memberRows ?? []).map((r) => r.group_id);
+      if (!groupIds.length) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("events")
+        .select("id, group_id, title, place_name, event_date, event_time, groups(name, emoji)")
+        .in("group_id", groupIds)
+        .gte("event_date", today)
+        .order("event_date", { ascending: true })
+        .limit(5);
+      if (active) setUpcomingEvents((data ?? []) as unknown as UpcomingEvent[]);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [profile?.id]);
+
   return (
     <div className="pb-24">
       {/* Header */}
@@ -599,6 +636,35 @@ export default function Home() {
                 </div>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {/* Upcoming events created via AI Plan Event */}
+      {upcomingEvents.length > 0 && (
+        <section className="px-5 pt-2 pb-1">
+          <p className="mb-2 text-sm font-bold">Upcoming events</p>
+          <div className="no-scrollbar flex gap-3 overflow-x-auto">
+            {upcomingEvents.map((e) => (
+              <Link
+                key={e.id}
+                href={`/groups/${e.group_id}`}
+                className="w-52 shrink-0 rounded-lg bg-card p-3 shadow-soft"
+              >
+                <p className="text-[11px] font-semibold text-primary">
+                  {e.groups?.emoji} {e.groups?.name}
+                </p>
+                <p className="mt-1 truncate text-sm font-bold">{e.title}</p>
+                {e.place_name && (
+                  <p className="truncate text-[12px] text-on-surface-variant">📍 {e.place_name}</p>
+                )}
+                {(e.event_date || e.event_time) && (
+                  <p className="text-[12px] text-on-surface-variant">
+                    🗓️ {[e.event_date, e.event_time].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+              </Link>
+            ))}
           </div>
         </section>
       )}
