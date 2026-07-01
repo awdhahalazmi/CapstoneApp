@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile } from "@/lib/supabase/use-session";
 import { useGroups } from "@/lib/groups-store";
@@ -204,6 +204,7 @@ function PollCard({ poll, isOwner }: { poll: WAPoll; isOwner: boolean }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function WAGroupPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const groupId = params.id;
   const { groups } = useGroups();
@@ -256,9 +257,9 @@ export default function WAGroupPage() {
     <div className="flex min-h-[100dvh] flex-col bg-surface">
       {/* Header */}
       <header className="sticky top-0 z-20 grid grid-cols-[3rem_1fr_auto] items-center gap-2 border-b border-outline-variant/20 bg-surface/95 px-1 py-1 backdrop-blur-md">
-        <Link href={`/groups/${groupId}`} className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
+        <button onClick={() => router.back()} className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
           <ArrowLeftIcon />
-        </Link>
+        </button>
         <div className="min-w-0">
           <h1 className="truncate text-[17px] font-semibold text-on-surface">
             {group ? `${group.emoji} ${group.name}` : "Group"} — Polls
