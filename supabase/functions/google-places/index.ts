@@ -15,6 +15,19 @@ const PRICE_MAP: Record<string, string> = {
   PRICE_LEVEL_VERY_EXPENSIVE: "$$$$",
 };
 
+async function resolvePhotoUrl(photoName: string, apiKey: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true&key=${apiKey}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.photoUri ?? null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS });
@@ -51,6 +64,7 @@ Deno.serve(async (req: Request) => {
           "places.priceLevel",
           "places.types",
           "places.regularOpeningHours.openNow",
+          "places.photos",
         ].join(","),
       },
       body: JSON.stringify({
@@ -78,15 +92,20 @@ Deno.serve(async (req: Request) => {
     const data = await res.json();
 
     // deno-lint-ignore no-explicit-any
-    const places = (data.places ?? []).map((p: any) => ({
-      id: p.id ?? "",
-      name: p.displayName?.text ?? "",
-      address: p.formattedAddress ?? "",
-      rating: p.rating ?? null,
-      reviewCount: p.userRatingCount ?? 0,
-      price: PRICE_MAP[p.priceLevel] ?? null,
-      types: (p.types ?? []).slice(0, 3),
-      openNow: p.regularOpeningHours?.openNow ?? null,
+    const places = await Promise.all((data.places ?? []).map(async (p: any) => {
+      const photoName: string | null = p.photos?.[0]?.name ?? null;
+      const photoUrl = photoName ? await resolvePhotoUrl(photoName, apiKey) : null;
+      return {
+        id: p.id ?? "",
+        name: p.displayName?.text ?? "",
+        address: p.formattedAddress ?? "",
+        rating: p.rating ?? null,
+        reviewCount: p.userRatingCount ?? 0,
+        price: PRICE_MAP[p.priceLevel] ?? null,
+        types: (p.types ?? []).slice(0, 3),
+        openNow: p.regularOpeningHours?.openNow ?? null,
+        photoUrl,
+      };
     }));
 
     return new Response(

@@ -20,6 +20,7 @@ type PlaceCard = {
   price: string | null;
   openNow: boolean | null;
   types: string[];
+  photoUrl?: string | null;
 };
 
 type PollRow = {
@@ -330,7 +331,7 @@ export default function AIPlanPage() {
         const waRes = await fetch("/api/whatsapp/poll", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, waJid, groupId: params.id, question: "Where should we go? 🗺️", options: cards.map((c) => c.name) }),
+          body: JSON.stringify({ userId, waJid, groupId: params.id, question: "Where should we go? 🗺️", options: cards.map((c) => c.name), placePhotoUrls: cards.map((c) => c.photoUrl ?? null) }),
         });
         if (waRes.ok) {
           const { messageId } = await waRes.json() as { messageId?: string };

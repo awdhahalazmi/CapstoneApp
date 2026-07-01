@@ -18,7 +18,7 @@ async function fetchPlacePhotoUrl(placeName: string, googleKey: string): Promise
 }
 
 export async function POST(req: NextRequest) {
-  const { userId, waJid, question, options, announcementText } =
+  const { userId, waJid, question, options, announcementText, placePhotoUrls } =
     await req.json();
 
   if (!userId || !waJid || !question || !options?.length) {
@@ -33,13 +33,23 @@ export async function POST(req: NextRequest) {
     await waManager.sendText(userId, waJid, announcementText);
   }
 
-  // Send a photo for each place option before the poll so members can see the venues
-  const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  if (googleKey) {
-    for (const opt of options as string[]) {
-      const photoUrl = await fetchPlacePhotoUrl(opt, googleKey);
+  // Send a photo per place before the poll so members can see the venues.
+  // Prefer pre-fetched CDN URLs (from AI Plan); fall back to Google Places name search.
+  if (placePhotoUrls?.length) {
+    for (let i = 0; i < (options as string[]).length; i++) {
+      const photoUrl = (placePhotoUrls as (string | null)[])[i];
       if (photoUrl) {
-        await waManager.sendImageUrl(userId, waJid, photoUrl, opt);
+        await waManager.sendImageUrl(userId, waJid, photoUrl, (options as string[])[i]);
+      }
+    }
+  } else {
+    const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (googleKey) {
+      for (const opt of options as string[]) {
+        const photoUrl = await fetchPlacePhotoUrl(opt, googleKey);
+        if (photoUrl) {
+          await waManager.sendImageUrl(userId, waJid, photoUrl, opt);
+        }
       }
     }
   }
