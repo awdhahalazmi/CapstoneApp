@@ -541,9 +541,21 @@ export default function WAGroupPage() {
           >
             <PlusIcon className="h-4 w-4" /> Create Poll
           </button>
-          <button className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface active:scale-[0.98]">
-            📅 Create Event
-          </button>
+          {group?.ownerId === profile?.id ? (
+            <Link
+              href={`/groups/${groupId}/ai-plan`}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface active:scale-[0.98]"
+            >
+              AI Plan Event ✨
+            </Link>
+          ) : (
+            <button
+              disabled
+              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-outline bg-surface py-3 text-[14px] font-medium text-on-surface-variant opacity-50"
+            >
+              AI Plan Event ✨
+            </button>
+          )}
         </div>
       </div>
 

@@ -2,11 +2,76 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AiIcon, SendIcon } from "@/components/icons";
-import { assistantReply } from "@/lib/mock-data";
 import { useGroups } from "@/lib/groups-store";
 import { useProfile } from "@/lib/supabase/use-session";
 import { supabase } from "@/lib/supabase/client";
 import type { ChatMessage } from "@/lib/types";
+
+function isAskingForGroup(content: string): boolean {
+  const lower = content.toLowerCase();
+  return (
+    lower.includes("which group") ||
+    lower.includes("what group") ||
+    lower.includes("for which group") ||
+    lower.includes("select a group") ||
+    lower.includes("choose a group") ||
+    lower.includes("which of your groups") ||
+    lower.includes("which group would you")
+  );
+}
+
+function isEventCreated(content: string): boolean {
+  const lower = content.toLowerCase();
+  return (
+    lower.includes("event created") ||
+    lower.includes("has been added to the group") ||
+    lower.includes("created the event") ||
+    lower.includes("i've created") ||
+    lower.includes("i have created") ||
+    lower.includes("added to the group")
+  );
+}
+
+async function sendWaNotification(groupId: string) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: waLink } = await supabase
+      .from("whatsapp_group_links")
+      .select("wa_jid, user_id")
+      .eq("group_id", groupId)
+      .maybeSingle();
+
+    if (!waLink?.wa_jid) return;
+
+    const { data: event } = await supabase
+      .from("events")
+      .select("title, place_name, event_date, event_time, description")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!event) return;
+
+    await fetch("/api/whatsapp/send-event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: waLink.user_id,
+        waJid: waLink.wa_jid,
+        title: event.title,
+        placeName: event.place_name ?? undefined,
+        eventDate: event.event_date ?? undefined,
+        eventTime: event.event_time ?? undefined,
+        description: event.description ?? undefined,
+      }),
+    });
+  } catch {
+    // non-critical
+  }
+}
 
 export default function AiPage() {
   const { groups } = useGroups();
@@ -24,8 +89,10 @@ export default function AiPage() {
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [waSentGroupId, setWaSentGroupId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(0);
+  const pendingGroupIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,19 +118,42 @@ export default function AiPage() {
 
     let replyText = "";
     try {
-      const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: { messages: history, group: groupContext, interests },
-      });
-      if (error) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const body = await (error as any).context?.json?.().catch?.(() => null);
-        throw new Error(body?.error ?? error.message ?? "edge function error");
-      }
-      if (data?.error) throw new Error(data.error as string);
-      if (!data?.reply) throw new Error("no reply in response");
-      replyText = data.reply as string;
+      replyText = await (async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { data, error } = await supabase.functions.invoke("ai-chat", {
+            body: { messages: history, group: groupContext, interests },
+          });
+          if (error) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const body = await (error as any).context?.json?.().catch?.(() => null);
+            const msg: string = body?.error ?? error.message ?? "edge function error";
+            const isRate = msg.includes("429") || msg.toLowerCase().includes("rate") || msg.includes("non-2xx");
+            if (isRate && attempt < 2) { await new Promise((r) => setTimeout(r, (attempt + 1) * 4000)); continue; }
+            throw new Error(msg);
+          }
+          if (data?.error) {
+            const msg = String(data.error);
+            const isRate = msg.includes("429") || msg.toLowerCase().includes("rate");
+            if (isRate && attempt < 2) { await new Promise((r) => setTimeout(r, (attempt + 1) * 4000)); continue; }
+            throw new Error(msg);
+          }
+          if (!data?.reply) throw new Error("No reply from AI.");
+          return data.reply as string;
+        }
+        throw new Error("AI is busy — please try again in a moment.");
+      })();
     } catch (err) {
-      replyText = `[AI error: ${err instanceof Error ? err.message : String(err)}]`;
+      replyText = `Sorry, I couldn't respond right now. Please try again in a moment. (${err instanceof Error ? err.message : String(err)})`;
+    }
+
+    // If a group was picked via chip and AI just created an event, send to WA
+    const pickedGroupId = pendingGroupIdRef.current;
+    if (pickedGroupId && isEventCreated(replyText)) {
+      pendingGroupIdRef.current = null;
+      sendWaNotification(pickedGroupId).then(() => {
+        setWaSentGroupId(pickedGroupId);
+        setTimeout(() => setWaSentGroupId(null), 4000);
+      });
     }
 
     setMessages((m) => [
@@ -81,6 +171,15 @@ export default function AiPage() {
       ]
     : ["Plan something for tonight", "Find a quiet café", "Outdoor spot this weekend"];
 
+  const lastMsg = messages[messages.length - 1];
+  const showGroupPicker =
+    !thinking &&
+    lastMsg?.role === "assistant" &&
+    isAskingForGroup(lastMsg.content) &&
+    groups.length > 0;
+
+  const waSentGroup = groups.find((g) => g.id === waSentGroupId);
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -96,6 +195,12 @@ export default function AiPage() {
               : "Plan an outing or ask anything"}
           </p>
         </div>
+        {/* WA sent toast */}
+        {waSentGroup && (
+          <span className="ml-auto shrink-0 rounded-full bg-green-100 px-3 py-1 text-[11px] font-semibold text-green-700">
+            ✓ Sent to {waSentGroup.name}
+          </span>
+        )}
       </header>
 
       {/* Group selector */}
@@ -157,14 +262,40 @@ export default function AiPage() {
         <div ref={endRef} />
       </div>
 
-      {/* Quick suggestions — adapt to the selected group */}
-      <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2">
-        {suggestions.map((s) => (
-          <button key={s} className="chip" onClick={() => send(s)}>
-            {s}
-          </button>
-        ))}
-      </div>
+      {/* Group picker — appears when AI asks which group */}
+      {showGroupPicker && (
+        <div className="border-t border-outline-variant/40 px-4 py-2.5">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+            Select a group
+          </p>
+          <div className="no-scrollbar flex gap-2 overflow-x-auto">
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                className="chip"
+                onClick={() => {
+                  pendingGroupIdRef.current = g.id;
+                  send(`${g.emoji} ${g.name}`);
+                }}
+              >
+                <span aria-hidden>{g.emoji}</span>
+                {g.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick suggestions */}
+      {!showGroupPicker && (
+        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2">
+          {suggestions.map((s) => (
+            <button key={s} className="chip" onClick={() => send(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Input */}
       <form
@@ -198,15 +329,14 @@ export default function AiPage() {
 }
 
 function AssistantMessage({ content }: { content: string }) {
-  // Strip markdown tables, clean up asterisks, preserve line breaks
   const cleaned = content
     .split("\n")
     .filter((line) => !line.trim().startsWith("|") && !/^[-|:\s]+$/.test(line.trim()))
     .join("\n")
-    .replace(/\*\*(.+?)\*\*/g, "$1")  // remove **bold** markers
-    .replace(/\*(.+?)\*/g, "$1")       // remove *italic* markers
-    .replace(/^#{1,3}\s+/gm, "")       // remove ## headings
-    .replace(/\n{3,}/g, "\n\n")        // collapse excess blank lines
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/^#{1,3}\s+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 
   return (

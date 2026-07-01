@@ -306,6 +306,130 @@ export type Database = {
         }
         Relationships: []
       }
+      events: {
+        Row: {
+          id: string
+          group_id: string
+          title: string
+          description: string | null
+          place_name: string | null
+          place_lat: number | null
+          place_lng: number | null
+          event_date: string | null
+          event_time: string | null
+          poll_summary: string | null
+          source_poll_id: string | null
+          wa_jid: string | null
+          wa_message_id: string | null
+          sent_at: string | null
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          title: string
+          description?: string | null
+          place_name?: string | null
+          place_lat?: number | null
+          place_lng?: number | null
+          event_date?: string | null
+          event_time?: string | null
+          poll_summary?: string | null
+          source_poll_id?: string | null
+          wa_jid?: string | null
+          wa_message_id?: string | null
+          sent_at?: string | null
+          created_by: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          title?: string
+          description?: string | null
+          place_name?: string | null
+          place_lat?: number | null
+          place_lng?: number | null
+          event_date?: string | null
+          event_time?: string | null
+          poll_summary?: string | null
+          source_poll_id?: string | null
+          wa_jid?: string | null
+          wa_message_id?: string | null
+          sent_at?: string | null
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_source_poll_id_fkey"
+            columns: ["source_poll_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_polls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_reminders: {
+        Row: {
+          id: string
+          event_id: string
+          remind_at: string
+          label: string
+          status: string
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          remind_at: string
+          label: string
+          status?: string
+          created_by: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          remind_at?: string
+          label?: string
+          status?: string
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_reminders_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_reminders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string

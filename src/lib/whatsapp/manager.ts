@@ -6,6 +6,7 @@
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { initReminderScheduler } from "./reminder-scheduler";
 
 export interface WAGroup {
   id: string;
@@ -183,6 +184,7 @@ class WhatsAppManager {
   constructor() {
     fs.mkdirSync(this.sessionsDir, { recursive: true });
     this._reconnectSaved();
+    initReminderScheduler(this);
   }
 
   private _msgsFile(userId: string, waJid: string): string {

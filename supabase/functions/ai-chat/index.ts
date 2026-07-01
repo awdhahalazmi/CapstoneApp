@@ -34,30 +34,52 @@ async function chatCompletion(
   messages: OAIMessage[],
   tools: OAIToolDef[],
 ): Promise<OAIMessage> {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_KEY}`,
-      "HTTP-Referer": "https://beyond-kw.app",
-      "X-Title": "Beyond Kw",
-    },
-    body: JSON.stringify({
-      model: "google/gemma-4-31b-it:free",
-      messages,
-      tools: tools.length ? tools : undefined,
-      tool_choice: tools.length ? "auto" : undefined,
-      max_tokens: 1200,
-    }),
-  });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENROUTER_KEY}`,
+        "HTTP-Referer": "https://beyond-kw.app",
+        "X-Title": "Beyond Kw",
+      },
+      body: JSON.stringify({
+        model: "mistralai/mistral-small-3.2-24b-instruct:free",
+        messages,
+        tools: tools.length ? tools : undefined,
+        tool_choice: tools.length ? "auto" : undefined,
+        max_tokens: 400,
+      }),
+    });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`OpenRouter error ${res.status}: ${text}`);
+    if (res.status === 429 && attempt < 2) {
+      await new Promise((r) => setTimeout(r, (attempt + 1) * 4000));
+      continue;
+    }
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const isRate = res.status === 429 || text.includes("rate") || text.includes("429");
+      if (isRate && attempt < 2) {
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 4000));
+        continue;
+      }
+      throw new Error(`OpenRouter error ${res.status}: ${text}`);
+    }
+
+    const json = await res.json();
+    if (!json.choices || json.choices.length === 0) {
+      const errMsg = json.error?.message ?? JSON.stringify(json);
+      const isRate = errMsg.includes("429") || errMsg.toLowerCase().includes("rate");
+      if (isRate && attempt < 2) {
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 4000));
+        continue;
+      }
+      throw new Error(`OpenRouter: ${errMsg}`);
+    }
+    return json.choices[0].message as OAIMessage;
   }
-
-  const json = await res.json();
-  return json.choices[0].message as OAIMessage;
+  throw new Error("AI service is busy — please try again in a moment.");
 }
 
 // ── Supabase tools ────────────────────────────────────────────────────────────
@@ -258,20 +280,21 @@ Deno.serve(async (req: Request) => {
     // Build system prompt
     const today = new Date().toISOString().split("T")[0];
     let system =
-      "You are the Beyond Kw assistant — a friendly local guide for KUWAIT ONLY. " +
-      "You help young adults in Kuwait plan outings and discover places. " +
+      "You are the Beyond Kw assistant — a local guide for KUWAIT ONLY. " +
+      "SCOPE: Only answer about places, outings, and events in Kuwait. " +
+      "For anything else, say: 'I only help with places and outings in Kuwait 🇰🇼' " +
+      "STYLE: Be very short and direct. No long explanations. No intro sentences. No filler. " +
+      "When listing places, just show: name, area, one short reason. That's it. " +
+      "Max 5 places. Never write more than 6 lines total for a place list. " +
       "RULES: " +
-      "(1) Only recommend real places in Kuwait. " +
-      "(2) Always name specific places with their area. " +
-      "(3) Give 3–5 concrete options with a one-line reason and rough KWD budget. " +
-      "(4) For outing requests give a short timeline: time → place → activity. " +
-      "(5) Use your tools to fetch real data — don't make things up. " +
-      "(6) For group planning, use get_user_groups and get_user_friends to personalise suggestions. " +
-      "(7) EVENT CREATION: If the user asks to create an event, first ask which group it is for (if not specified). " +
-      "Then call get_user_groups to get the group ID, then call create_event. " +
-      `Today is ${today}. Convert day names like 'Sunday' to the nearest upcoming YYYY-MM-DD date. ` +
-      "(8) FORMATTING: Write in clean plain text. No markdown tables. No asterisks for bold. " +
-      "Use short paragraphs and line breaks. Use emojis sparingly for warmth. Keep responses concise.";
+      "(1) Only real Kuwait places. Never mention places outside Kuwait. " +
+      "(2) Use your tools to get real data — call get_places when asked about places. " +
+      "(3) For group planning, call get_user_groups and get_user_friends. " +
+      "(4) EVENT CREATION: If the user asks to create an event, ask which group (if not specified). " +
+      "Call get_user_groups to get the group ID, then call create_event. " +
+      `Today is ${today}. Convert day names like 'Sunday' to nearest upcoming YYYY-MM-DD. ` +
+      "(5) FORMATTING: Plain text only. No markdown, no tables, no asterisks, no headings. " +
+      "Use a simple numbered or dashed list for places. One emoji max per response.";
 
     if (group) {
       const memberNames = ((group as { members?: { name?: string }[] }).members ?? []).map((m) => m.name).join(", ");
