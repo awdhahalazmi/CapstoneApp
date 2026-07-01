@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase/client";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = "ready" | "fetching" | "voting" | "analyzing" | "winner" | "event" | "done";
+type Phase = "ready" | "fetching" | "voting" | "analyzing" | "draw" | "winner" | "event" | "done";
 
 type PlaceCard = {
   id: string;
@@ -176,7 +176,7 @@ export default function AIPlanPage() {
     const tot = totalVotes(poll.vote_counts ?? {});
     if (tot < 2) return;
     timerStartedRef.current = true;
-    let t = 5;
+    let t = 3;
     setCountdown(t);
     const interval = setInterval(() => {
       t -= 1;
@@ -196,11 +196,21 @@ export default function AIPlanPage() {
     if (phase !== "analyzing" || autoPickedRef.current || !poll) return;
     autoPickedRef.current = true;
     (async () => {
-      const idx = winnerIndex(poll.vote_counts ?? {});
+      const counts = poll.vote_counts ?? {};
+      const allCounts = placeCards.map((_, i) => counts[String(i)] ?? 0);
+      const maxV = Math.max(...allCounts, 0);
+      const tiedCount = maxV > 0 ? allCounts.filter((v) => v === maxV).length : 0;
+
+      // Draw: two or more places share the highest vote count
+      if (tiedCount > 1) {
+        setPhase("draw");
+        return;
+      }
+
+      const idx = winnerIndex(counts);
       const winner = placeCards[idx];
       if (!winner) { setPhase("done"); return; }
       setWinnerIdx(idx);
-      await new Promise((r) => setTimeout(r, 1500));
 
       // Check if server-side already created the event to avoid duplicates
       const { data: existing } = await supabase
@@ -413,6 +423,7 @@ export default function AIPlanPage() {
           {phase === "fetching" && "Finding Places…"}
           {phase === "voting" && "Vote on Places"}
           {phase === "analyzing" && "AI Deciding…"}
+          {phase === "draw" && "It's a Draw! 🤝"}
           {phase === "winner" && "AI Picked a Winner ✨"}
           {phase === "event" && "Create Event"}
           {phase === "done" && "Event Created 🎉"}
@@ -524,73 +535,83 @@ export default function AIPlanPage() {
 
             {/* Chart-style vote cards — sorted by votes (leaderboard order) */}
             <div className="space-y-1.5">
-              {placeCards
-                .map((card, idx) => ({ card, idx, count: poll?.vote_counts?.[String(idx)] ?? 0 }))
-                .sort((a, b) => b.count - a.count)
-                .map(({ card, idx, count }, rank0) => {
-                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-                const isMyVote = myVoteIdx === idx;
+              {(() => {
                 const maxCount = Math.max(...placeCards.map((_, i) => poll?.vote_counts?.[String(i)] ?? 0), 0);
-                const isLeading = total > 0 && count === maxCount && count > 0;
-                const rank = rank0 + 1;
-                const emoji = cardEmoji(card.types);
-                return (
-                  <button
-                    key={card.id}
-                    onClick={() => vote(idx)}
-                    className={`w-full overflow-hidden rounded-xl border text-left transition-all duration-200 active:scale-[0.98]
-                      ${isLeading
-                        ? "border-primary/25 bg-primary/5 shadow-[0_1px_8px_rgba(124,58,237,0.12)]"
-                        : "border-outline-variant/15 bg-surface-container"
-                      }`}
-                  >
-                    <div className="px-3 py-2.5">
-                      {/* Top row: rank · name · % */}
-                      <div className="flex items-center gap-2">
-                        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black
-                          ${isLeading ? "bg-primary text-white" : "bg-on-surface/10 text-on-surface-variant"}`}>
-                          {rank}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-semibold leading-tight text-on-surface">{card.name}</p>
-                        </div>
-                        <p className={`shrink-0 text-[18px] font-black tabular-nums leading-none
-                          ${isLeading ? "text-primary" : total === 0 ? "text-on-surface/20" : "text-on-surface/40"}`}>
-                          {pct}%
-                        </p>
-                      </div>
+                const leadCount = total > 0 && maxCount > 0
+                  ? placeCards.filter((_, i) => (poll?.vote_counts?.[String(i)] ?? 0) === maxCount).length
+                  : 0;
+                return placeCards
+                  .map((card, idx) => ({ card, idx, count: poll?.vote_counts?.[String(idx)] ?? 0 }))
+                  .sort((a, b) => b.count - a.count)
+                  .map(({ card, idx, count }, rank0) => {
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const isMyVote = myVoteIdx === idx;
+                    const isAtMax = total > 0 && count === maxCount && count > 0;
+                    const isLeading = isAtMax && leadCount === 1;
+                    const isTied = isAtMax && leadCount > 1;
+                    const rank = rank0 + 1;
+                    const emoji = cardEmoji(card.types);
+                    return (
+                      <button
+                        key={card.id}
+                        onClick={() => vote(idx)}
+                        className={`w-full overflow-hidden rounded-xl border text-left transition-all duration-200 active:scale-[0.98]
+                          ${isLeading
+                            ? "border-primary/25 bg-primary/5 shadow-[0_1px_8px_rgba(124,58,237,0.12)]"
+                            : isTied
+                            ? "border-amber-400/30 bg-amber-50/40 dark:bg-amber-900/10"
+                            : "border-outline-variant/15 bg-surface-container"
+                          }`}
+                      >
+                        <div className="px-3 py-2.5">
+                          {/* Top row: rank · name · % */}
+                          <div className="flex items-center gap-2">
+                            <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black
+                              ${isLeading ? "bg-primary text-white" : isTied ? "bg-amber-400 text-white" : "bg-on-surface/10 text-on-surface-variant"}`}>
+                              {rank}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13px] font-semibold leading-tight text-on-surface">{card.name}</p>
+                            </div>
+                            <p className={`shrink-0 text-[18px] font-black tabular-nums leading-none
+                              ${isLeading ? "text-primary" : isTied ? "text-amber-500" : total === 0 ? "text-on-surface/20" : "text-on-surface/40"}`}>
+                              {pct}%
+                            </p>
+                          </div>
 
-                      {/* Bar */}
-                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-on-surface/8">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ease-out
-                            ${isLeading ? "bg-gradient-to-r from-primary to-violet-500" : "bg-primary/30"}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                          {/* Bar */}
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-on-surface/8">
+                            <div
+                              className={`h-full rounded-full transition-all duration-700 ease-out
+                                ${isLeading ? "bg-gradient-to-r from-primary to-violet-500" : isTied ? "bg-amber-400" : "bg-primary/30"}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
 
-                      {/* Meta row */}
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <span className="text-xs">{emoji}</span>
-                        {card.rating && <span className="text-[10px] text-on-surface-variant">★ {card.rating.toFixed(1)}</span>}
-                        {card.openNow !== null && (
-                          <span className={`text-[10px] ${card.openNow ? "text-emerald-500" : "text-on-surface-variant/50"}`}>
-                            {card.openNow ? "● Open" : "Closed"}
-                          </span>
-                        )}
-                        <span className="flex-1" />
-                        {isLeading && <span className="text-[10px] font-semibold text-primary">🏆 Leading</span>}
-                        {isMyVote && (
-                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                            Your vote ✓
-                          </span>
-                        )}
-                        <span className="text-[10px] text-on-surface-variant">{count} vote{count !== 1 ? "s" : ""}</span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+                          {/* Meta row */}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <span className="text-xs">{emoji}</span>
+                            {card.rating && <span className="text-[10px] text-on-surface-variant">★ {card.rating.toFixed(1)}</span>}
+                            {card.openNow !== null && (
+                              <span className={`text-[10px] ${card.openNow ? "text-emerald-500" : "text-on-surface-variant/50"}`}>
+                                {card.openNow ? "● Open" : "Closed"}
+                              </span>
+                            )}
+                            <span className="flex-1" />
+                            {isLeading && <span className="text-[10px] font-semibold text-primary">🏆 Leading</span>}
+                            {isTied && <span className="text-[10px] font-semibold text-amber-500">🤝 Draw</span>}
+                            {isMyVote && (
+                              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                Your vote ✓
+                              </span>
+                            )}
+                            <span className="text-[10px] text-on-surface-variant">{count} vote{count !== 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  });
+              })()}
             </div>
 
             {countdown === null && total > 0 && (
@@ -618,6 +639,66 @@ export default function AIPlanPage() {
             <p className="mt-2 text-[14px] text-on-surface-variant">Analyzing votes and creating your event</p>
           </div>
         )}
+
+        {/* ── DRAW ── */}
+        {phase === "draw" && poll && (() => {
+          const counts = poll.vote_counts ?? {};
+          const allCounts = placeCards.map((_, i) => counts[String(i)] ?? 0);
+          const maxV = Math.max(...allCounts, 0);
+          const tiedCards = placeCards
+            .map((card, idx) => ({ card, idx, count: allCounts[idx] }))
+            .filter(({ count }) => count === maxV && maxV > 0);
+          return (
+            <div className="flex flex-col items-center px-4 pt-10 text-center">
+              <div className="grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-5xl shadow-[0_12px_32px_rgba(251,191,36,0.4)]">
+                🤝
+              </div>
+              <h2 className="mt-5 text-[24px] font-bold text-on-surface">It's a Draw!</h2>
+              <p className="mt-1.5 text-[14px] text-on-surface-variant">
+                {tiedCards.length} places tied with {maxV} vote{maxV !== 1 ? "s" : ""} each
+              </p>
+
+              <div className="mt-6 w-full space-y-2 text-left">
+                {tiedCards.map(({ card }) => (
+                  <div key={card.id} className="rounded-2xl border border-amber-400/30 bg-amber-50/60 px-4 py-3 dark:bg-amber-900/10">
+                    <p className="text-[14px] font-semibold text-on-surface">{card.name}</p>
+                    <p className="mt-0.5 text-[12px] text-on-surface-variant">{card.address}</p>
+                    {card.rating && (
+                      <p className="mt-0.5 text-[11px] text-on-surface-variant">★ {card.rating.toFixed(1)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => {
+                  timerStartedRef.current = false;
+                  autoPickedRef.current = false;
+                  setCountdown(null);
+                  setPhase("voting");
+                }}
+                className="mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-[16px] font-semibold text-white shadow-[0_10px_28px_rgba(251,191,36,0.35)] transition active:scale-[0.97]"
+              >
+                Vote Again to Break the Tie
+              </button>
+              <button
+                onClick={() => {
+                  timerStartedRef.current = false;
+                  autoPickedRef.current = false;
+                  setCountdown(null);
+                  setPoll(null);
+                  setPlaceCards([]);
+                  setMyVoteIdx(null);
+                  setWinnerIdx(null);
+                  setPhase("ready");
+                }}
+                className="mt-3 text-[13px] font-medium text-on-surface-variant"
+              >
+                Start a new plan
+              </button>
+            </div>
+          );
+        })()}
 
         {/* ── WINNER ── */}
         {phase === "winner" && winnerIdx !== null && (() => {
