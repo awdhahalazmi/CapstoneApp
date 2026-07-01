@@ -821,6 +821,13 @@ class WhatsAppManager {
     catch (err) { console.error("[WA] sendText error:", err); }
   }
 
+  async sendImageUrl(userId: string, jid: string, imageUrl: string, caption: string): Promise<void> {
+    const s = this.sessions.get(userId);
+    if (!s?.socket || s.status !== "connected") return;
+    try { await s.socket.sendMessage(jid, { image: { url: imageUrl }, caption }); }
+    catch (err) { console.error("[WA] sendImageUrl error:", err); }
+  }
+
   async disconnect(userId: string): Promise<void> {
     const s = this.sessions.get(userId);
     if (s?.socket) {
