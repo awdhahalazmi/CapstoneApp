@@ -304,6 +304,7 @@ export default function OutingPlannerPage() {
   // Option 1
   const [selectedPollId, setSelectedPollId] = useState<string | null>(null);
   const [tiedPlaces, setTiedPlaces] = useState<string[]>([]);
+  const [fromPhase, setFromPhase] = useState<Phase>("choose");
 
   // Option 2
   const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -386,6 +387,7 @@ export default function OutingPlannerPage() {
       const place = poll.options[indices[0]];
       setWinningPlace(place);
       setEventForm({ title: `Group Outing — ${place}`, place, date: "", time: "", description: `Poll winner: ${place} with ${count} vote${count !== 1 ? "s" : ""}` });
+      setFromPhase("select-poll");
       setPhase("event-preview");
     } else {
       setTiedPlaces(indices.map((i) => poll.options[i]));
@@ -396,6 +398,7 @@ export default function OutingPlannerPage() {
   function pickTiedPlace(place: string) {
     setWinningPlace(place);
     setEventForm({ title: `Group Outing — ${place}`, place, date: "", time: "", description: "Chosen by admin to break the tie." });
+    setFromPhase("tie-break");
     setPhase("event-preview");
   }
 
@@ -477,7 +480,7 @@ export default function OutingPlannerPage() {
 
   // ── Analyze results ────────────────────────────────────────────────────────
 
-  async function analyzeResults() {
+  async function analyzeResults(calledFrom: Phase = "tracking") {
     const toAnalyze = polls.filter((p) => selectedPollIds.has(p.id));
     if (toAnalyze.length === 0) return;
     setPhase("analyzing"); setError(null);
@@ -487,7 +490,7 @@ export default function OutingPlannerPage() {
       `IMPORTANT: Reply with raw JSON only — no markdown, no explanation.\n\n` +
       `Group "${group?.name}" voted on their outing in Kuwait.\n\n` +
       toAnalyze.map((p) => `Poll: "${p.question}"\n${summarize(p)}`).join("\n\n") +
-      `\n\nFind the winning place and winning date/time.\n` +
+      `\n\nAnalyze ALL polls above together. Find the best matching place (considering all polls) and the winning date/time.\n` +
       `Reply ONLY:\n{"winningPlace":"Place Name","winningTime":"Day, Month DD · HH:MM AM/PM or TBD","pollSummary":"Brief result summary"}`;
     try {
       const reply = await invokeAi(prompt, supabase);
@@ -499,10 +502,11 @@ export default function OutingPlannerPage() {
       setWinningPlace(place);
       setWinningTime(timeLabel);
       setEventForm({ title: place ? `Group Outing — ${place}` : "Group Outing", place, date, time, description: parsed.pollSummary ?? "" });
+      setFromPhase(calledFrom);
       setPhase("event-preview");
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI analysis failed. Try again.");
-      setPhase("tracking");
+      setPhase(calledFrom);
     }
   }
 
@@ -608,7 +612,7 @@ export default function OutingPlannerPage() {
     const map: Partial<Record<Phase, Phase>> = {
       "select-poll": "choose", "tie-break": "select-poll",
       "ai-suggestion": "choose", "build-polls": "ai-suggestion",
-      "event-preview": phase === "event-preview" ? "tracking" : "select-poll",
+      "event-preview": fromPhase,
       reminders: "event-preview",
     };
     const p = map[phase]; if (p) setPhase(p);
@@ -693,17 +697,34 @@ export default function OutingPlannerPage() {
         {/* ── Select poll ────────────────────────────────────────────────── */}
         {phase === "select-poll" && (
           <>
-            <p className="text-[13px] text-on-surface-variant">
-              Select the poll the AI should analyze to find the winning place.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] text-on-surface-variant">
+                Select the polls for AI to analyze together.
+              </p>
+              {polls.length > 1 && (
+                <button
+                  onClick={() => setSelectedPollIds(selectedPollIds.size === polls.length ? new Set() : new Set(polls.map((p) => p.id)))}
+                  className="text-[12px] font-medium text-primary">
+                  {selectedPollIds.size === polls.length ? "Deselect all" : "Select all"}
+                </button>
+              )}
+            </div>
             <div className="space-y-3">
               {polls.map((poll) => {
                 const total = pollTotal(poll.vote_counts);
                 const { indices } = getWinners(poll);
                 const leader = indices.length === 1 ? poll.options[indices[0]] : null;
-                const isSel = selectedPollId === poll.id;
+                const isSel = selectedPollIds.has(poll.id);
                 return (
-                  <button key={poll.id} onClick={() => { setSelectedPollId(poll.id); setError(null); }}
+                  <button key={poll.id}
+                    onClick={() => {
+                      setSelectedPollIds((prev) => {
+                        const n = new Set(prev);
+                        n.has(poll.id) ? n.delete(poll.id) : n.add(poll.id);
+                        return n;
+                      });
+                      setError(null);
+                    }}
                     className={`w-full rounded-2xl border-2 px-4 py-4 text-left transition-all ${isSel ? "border-primary bg-primary/4" : "border-transparent bg-surface-container"}`}>
                     <div className="flex items-start gap-3">
                       <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${isSel ? "border-primary bg-primary" : "border-outline"}`}>
@@ -730,9 +751,11 @@ export default function OutingPlannerPage() {
               })}
             </div>
             <div className="sticky bottom-24 pt-2">
-              <button onClick={analyzePoll} disabled={!selectedPollId}
+              <button onClick={() => analyzeResults("select-poll")} disabled={selectedPollIds.size === 0}
                 className="w-full rounded-full bg-primary py-3.5 text-[15px] font-semibold text-on-primary shadow-lg disabled:opacity-40">
-                Analyze selected poll ✨
+                {selectedPollIds.size > 0
+                  ? `Analyze ${selectedPollIds.size} poll${selectedPollIds.size !== 1 ? "s" : ""} with AI ✨`
+                  : "Select at least one poll"}
               </button>
             </div>
           </>
@@ -883,7 +906,7 @@ export default function OutingPlannerPage() {
               })}
             </div>
             <div className="sticky bottom-24 pt-2">
-              <button onClick={analyzeResults} disabled={selectedPollIds.size === 0}
+              <button onClick={() => analyzeResults("tracking")} disabled={selectedPollIds.size === 0}
                 className="w-full rounded-full bg-primary py-3.5 text-[15px] font-semibold text-on-primary shadow-lg disabled:opacity-40">
                 {selectedPollIds.size > 0
                   ? `Results are in — Analyze ${selectedPollIds.size} poll${selectedPollIds.size !== 1 ? "s" : ""} ✨`
