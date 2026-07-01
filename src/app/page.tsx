@@ -640,23 +640,6 @@ export default function Home() {
         </section>
       )}
 
-      {/* Invite friends card */}
-      <section className="px-5 pt-4">
-        <Link
-          href="/friends"
-          className="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-primary/10 to-violet-500/10 border border-primary/15 px-4 py-4 transition active:scale-[0.98]"
-        >
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/15 text-xl">
-            👥
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-semibold text-on-surface">Find &amp; invite friends</p>
-            <p className="text-[12px] text-on-surface-variant">Grow your squad — search by username</p>
-          </div>
-          <span className="text-primary text-lg">›</span>
-        </Link>
-      </section>
-
       {/* Upcoming events created via AI Plan Event */}
       {upcomingEvents.length > 0 && (
         <section className="px-5 pt-2 pb-1">
