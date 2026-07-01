@@ -102,6 +102,26 @@ const TOOL_DEFS: OAIToolDef[] = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_event",
+      description:
+        "Creates a group event in Beyond Kw. Always call get_user_groups first to get the correct group ID. If the user hasn't specified a group, ask them which group this event is for BEFORE calling this tool.",
+      parameters: {
+        type: "object",
+        required: ["groupId", "title"],
+        properties: {
+          groupId: { type: "string", description: "UUID of the group (from get_user_groups [id:...] field)" },
+          title: { type: "string", description: "Event title" },
+          description: { type: "string", description: "Optional event description" },
+          placeName: { type: "string", description: "Venue or place name" },
+          eventDate: { type: "string", description: "Date in YYYY-MM-DD format" },
+          eventTime: { type: "string", description: "Time in HH:MM 24h format" },
+        },
+      },
+    },
+  },
 ];
 
 async function runTool(
@@ -134,7 +154,7 @@ async function runTool(
     }
 
     return (groups as { id: string; name: string; emoji: string; is_public: boolean }[])
-      .map((g) => `${g.emoji} ${g.name} (${g.is_public ? "public" : "private"}) — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`)
+      .map((g) => `${g.emoji} ${g.name} [id:${g.id}] (${g.is_public ? "public" : "private"}) — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`)
       .join("\n");
   }
 
@@ -185,6 +205,26 @@ async function runTool(
       .join("\n");
   }
 
+  if (name === "create_event") {
+    const { groupId, title, description, placeName, eventDate, eventTime } = args as {
+      groupId: string; title: string; description?: string;
+      placeName?: string; eventDate?: string; eventTime?: string;
+    };
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return "Error: Not authenticated.";
+    const { data, error } = await sb.from("events").insert({
+      group_id: groupId, title,
+      description: description || null,
+      place_name: placeName || null,
+      event_date: eventDate || null,
+      event_time: eventTime || null,
+      created_by: user.id,
+    }).select().single();
+    if (error) return `Failed to create event: ${error.message}`;
+    const ev = data as { title: string; event_date?: string; place_name?: string };
+    return `Event created! "${ev.title}"${ev.place_name ? ` at ${ev.place_name}` : ""}${ev.event_date ? ` on ${ev.event_date}` : ""} has been added to the group.`;
+  }
+
   return "Unknown tool.";
 }
 
@@ -216,15 +256,22 @@ Deno.serve(async (req: Request) => {
     const { messages = [], group = null, interests = [] } = await req.json();
 
     // Build system prompt
+    const today = new Date().toISOString().split("T")[0];
     let system =
       "You are the Beyond Kw assistant — a friendly local guide for KUWAIT ONLY. " +
       "You help young adults in Kuwait plan outings and discover places. " +
-      "RULES: (1) Only recommend real places in Kuwait. " +
+      "RULES: " +
+      "(1) Only recommend real places in Kuwait. " +
       "(2) Always name specific places with their area. " +
       "(3) Give 3–5 concrete options with a one-line reason and rough KWD budget. " +
       "(4) For outing requests give a short timeline: time → place → activity. " +
-      "(5) Use your tools to fetch real data about the user's groups, friends, and places — don't make things up. " +
-      "(6) For group planning, use get_user_groups and get_user_friends to personalise suggestions.";
+      "(5) Use your tools to fetch real data — don't make things up. " +
+      "(6) For group planning, use get_user_groups and get_user_friends to personalise suggestions. " +
+      "(7) EVENT CREATION: If the user asks to create an event, first ask which group it is for (if not specified). " +
+      "Then call get_user_groups to get the group ID, then call create_event. " +
+      `Today is ${today}. Convert day names like 'Sunday' to the nearest upcoming YYYY-MM-DD date. ` +
+      "(8) FORMATTING: Write in clean plain text. No markdown tables. No asterisks for bold. " +
+      "Use short paragraphs and line breaks. Use emojis sparingly for warmth. Keep responses concise.";
 
     if (group) {
       const memberNames = ((group as { members?: { name?: string }[] }).members ?? []).map((m) => m.name).join(", ");

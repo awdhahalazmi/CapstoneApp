@@ -49,13 +49,13 @@ const getUserGroupsTool = (jwt: string) =>
       return groups
         .map(
           (g: { id: string; name: string; emoji: string; is_public: boolean }) =>
-            `${g.emoji} ${g.name} (${g.is_public ? "public" : "private"}) — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`,
+            `${g.emoji} ${g.name} [id:${g.id}] (${g.is_public ? "public" : "private"}) — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`,
         )
         .join("\n");
     },
     {
       name: "get_user_groups",
-      description: "Returns the signed-in user's groups and their members.",
+      description: "Returns the signed-in user's groups, their members, and their IDs. Always call this before create_event to find the correct group ID.",
       schema: z.object({}),
     },
   );
@@ -161,6 +161,53 @@ const getGroupActivityTool = (jwt: string) =>
     },
   );
 
+const createEventTool = (jwt: string) =>
+  tool(
+    async ({ groupId, title, description, placeName, eventDate, eventTime }: {
+      groupId: string;
+      title: string;
+      description?: string;
+      placeName?: string;
+      eventDate?: string;
+      eventTime?: string;
+    }) => {
+      const sb = makeSupabase(jwt);
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return "Error: Not authenticated.";
+
+      const { data, error } = await sb.from("events").insert({
+        group_id: groupId,
+        title,
+        description: description || null,
+        place_name: placeName || null,
+        event_date: eventDate || null,
+        event_time: eventTime || null,
+        created_by: user.id,
+      }).select().single();
+
+      if (error) return `Failed to create event: ${error.message}`;
+
+      const ev = data as { title: string; event_date?: string; place_name?: string };
+      return `Event created! 🎉 "${ev.title}"${ev.place_name ? ` at ${ev.place_name}` : ""}${ev.event_date ? ` on ${ev.event_date}` : ""} has been added to the group.`;
+    },
+    {
+      name: "create_event",
+      description:
+        "Creates a group event in Beyond Kw. " +
+        "IMPORTANT: Always call get_user_groups first to get the correct group ID. " +
+        "If the user hasn't specified a group, ask them which group this event is for before calling this tool. " +
+        "eventDate must be YYYY-MM-DD, eventTime must be HH:MM (24h).",
+      schema: z.object({
+        groupId: z.string().describe("UUID of the group from get_user_groups [id:...] field"),
+        title: z.string().describe("Event title"),
+        description: z.string().optional().describe("Optional description"),
+        placeName: z.string().optional().describe("Venue or place name"),
+        eventDate: z.string().optional().describe("Date in YYYY-MM-DD format"),
+        eventTime: z.string().optional().describe("Time in HH:MM 24h format"),
+      }),
+    },
+  );
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -184,10 +231,11 @@ export async function POST(req: NextRequest) {
     getUserFriendsTool(jwt),
     getPlacesTool(jwt),
     getGroupActivityTool(jwt),
+    createEventTool(jwt),
   ];
 
   const model = new ChatOpenAI({
-    model: "openai/gpt-4o-mini",
+    model: "google/gemma-4-31b-it:free",
     apiKey,
     configuration: {
       baseURL: "https://openrouter.ai/api/v1",
@@ -208,7 +256,11 @@ export async function POST(req: NextRequest) {
     "(3) Give 3–5 concrete options with a one-line reason and rough KWD budget. " +
     "(4) For outing requests give a short timeline: time → place → activity. " +
     "(5) Use your tools to fetch real data about the user's groups, friends, and places — don't make things up. " +
-    "(6) For group planning, use get_user_groups and get_user_friends to personalise suggestions.";
+    "(6) For group planning, use get_user_groups and get_user_friends to personalise suggestions. " +
+    "(7) EVENT CREATION: If the user asks to create an event, ALWAYS ask which group it's for if they haven't specified. " +
+    "Then call get_user_groups to get the group ID, then call create_event. " +
+    "If the date is a day name like 'Sunday', convert it to the nearest upcoming YYYY-MM-DD date (today is " + new Date().toISOString().split("T")[0] + "). " +
+    "After creating, confirm with the event details.";
 
   if (group) {
     const memberNames = (group.members ?? []).map((m: { name?: string }) => m.name).join(", ");

@@ -51,7 +51,6 @@ export default function AiPage() {
 
     let replyText = "";
     try {
-      // Real AI via the Supabase `ai-chat` edge function (OpenRouter key stays server-side).
       const { data, error } = await supabase.functions.invoke("ai-chat", {
         body: { messages: history, group: groupContext, interests },
       });
@@ -133,7 +132,7 @@ export default function AiPage() {
                 <AiIcon className="h-4 w-4" />
               </span>
               <div className="max-w-[80%] rounded-lg rounded-bl-sm bg-card px-3.5 py-2.5 text-sm shadow-soft">
-                {m.content}
+                <AssistantMessage content={m.content} />
               </div>
             </div>
           ) : (
@@ -194,6 +193,32 @@ export default function AiPage() {
           <SendIcon className="h-5 w-5" />
         </button>
       </form>
+    </div>
+  );
+}
+
+function AssistantMessage({ content }: { content: string }) {
+  // Strip markdown tables, clean up asterisks, preserve line breaks
+  const cleaned = content
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("|") && !/^[-|:\s]+$/.test(line.trim()))
+    .join("\n")
+    .replace(/\*\*(.+?)\*\*/g, "$1")  // remove **bold** markers
+    .replace(/\*(.+?)\*/g, "$1")       // remove *italic* markers
+    .replace(/^#{1,3}\s+/gm, "")       // remove ## headings
+    .replace(/\n{3,}/g, "\n\n")        // collapse excess blank lines
+    .trim();
+
+  return (
+    <div className="space-y-1.5">
+      {cleaned.split("\n").map((line, i) => {
+        if (line.trim() === "") return <div key={i} className="h-1" />;
+        return (
+          <p key={i} className="leading-relaxed">
+            {line}
+          </p>
+        );
+      })}
     </div>
   );
 }
