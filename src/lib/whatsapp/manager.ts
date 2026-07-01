@@ -570,8 +570,9 @@ class WhatsAppManager {
           console.log(`[WA] ${parsed.msgType} from ${senderName}: ${parsed.text?.slice(0, 40) || ""}`);
 
           // ── /plan command ─────────────────────────────────────────────────
-          if (!isFromMe && parsed.text?.trim() === "/plan") {
+          if (parsed.text?.trim().toLowerCase() === "/plan") {
             const gName = session.groups.find((g) => g.id === remoteJid)?.name ?? "your group";
+            console.log(`[WA] /plan triggered by ${senderName} in ${gName}`);
             handlePlanCommand(this, userId, remoteJid, gName).catch((e) =>
               console.error("[WA] /plan handler error:", e),
             );
