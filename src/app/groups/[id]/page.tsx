@@ -41,6 +41,15 @@ type WAPoll = {
   wa_message_id: string | null;
 };
 
+type EventRow = {
+  id: string;
+  title: string;
+  place_name: string | null;
+  event_date: string | null;
+  event_time: string | null;
+  sent_at: string | null;
+};
+
 // ── M3 Linear Progress ─────────────────────────────────────────────────────────
 function LinearProgress({ value }: { value: number }) {
   return (
@@ -184,20 +193,24 @@ export default function GroupHubPage() {
   const [waJid, setWaJid] = useState<string | null>(null);
   const [waConnected, setWaConnected] = useState(false);
   const [showPollSheet, setShowPollSheet] = useState(false);
+  const [events, setEvents] = useState<EventRow[]>([]);
 
   useEffect(() => {
     if (!userId || !params.id) return;
     async function load() {
-      const [{ data: link }, statusRes, { data: pollData }] = await Promise.all([
+      const [{ data: link }, statusRes, { data: pollData }, { data: eventData }] = await Promise.all([
         supabase.from("whatsapp_group_links").select("wa_jid")
           .eq("group_id", params.id).eq("user_id", userId).maybeSingle(),
         fetch(`/api/whatsapp/status?userId=${userId}`).then(r => r.json()).catch(() => ({})),
         supabase.from("whatsapp_polls").select("*")
           .eq("group_id", params.id).order("created_at", { ascending: false }).limit(3),
+        supabase.from("events").select("id, title, place_name, event_date, event_time, sent_at")
+          .eq("group_id", params.id).order("event_date", { ascending: true }).limit(5),
       ]);
       setWaJid(link?.wa_jid ?? null);
       setWaConnected(statusRes?.status === "connected");
       setPolls((pollData ?? []) as WAPoll[]);
+      setEvents((eventData ?? []) as EventRow[]);
     }
     load();
   }, [userId, params.id]);
@@ -369,6 +382,49 @@ export default function GroupHubPage() {
                 <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
               </svg>
             </Link>
+
+          </section>
+        )}
+
+        {/* ── Plan an Outing (visible to all members) ───── */}
+        <section>
+          <Link
+            href={`/groups/${group.id}/ai-plan`}
+            className="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-primary/15 to-primary/5 px-4 py-4 transition active:opacity-90"
+          >
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/15 text-2xl">
+              ✨
+            </div>
+            <div className="flex-1">
+              <p className="text-[15px] font-medium text-primary">Plan an Outing ✨</p>
+              <p className="text-[12px] text-on-surface-variant">
+                AI suggestions, polls &amp; event creation
+              </p>
+            </div>
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-on-surface-variant/40">
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+            </svg>
+          </Link>
+        </section>
+
+        {/* ── Events section ────────────────────────────── */}
+        {events.length > 0 && (
+          <section>
+            <h2 className="mb-3 text-[16px] font-medium text-on-surface">Events</h2>
+            <div className="space-y-3">
+              {events.map((e) => (
+                <div key={e.id} className="rounded-2xl bg-surface-container px-4 py-4">
+                  <p className="text-[15px] font-medium text-on-surface">{e.title}</p>
+                  {e.place_name && <p className="mt-0.5 text-[12px] text-on-surface-variant">📍 {e.place_name}</p>}
+                  {(e.event_date || e.event_time) && (
+                    <p className="mt-0.5 text-[12px] text-on-surface-variant">
+                      🗓️ {[e.event_date, e.event_time].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  {e.sent_at && <p className="mt-1 text-[11px] text-[#128c7e]">✓ Sent to WhatsApp</p>}
+                </div>
+              ))}
+            </div>
           </section>
         )}
 
