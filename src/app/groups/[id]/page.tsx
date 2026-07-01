@@ -69,6 +69,62 @@ const CAT_EMOJI: Record<string, string> = {
 };
 const catEmoji = (cat: string) => CAT_EMOJI[cat] ?? "📍";
 
+const CAT_GRADIENT: Record<string, string> = {
+  Café:       "linear-gradient(135deg,#92400e,#78350f)",
+  Restaurant: "linear-gradient(135deg,#c2410c,#9a3412)",
+  Dessert:    "linear-gradient(135deg,#db2777,#9d174d)",
+  Breakfast:  "linear-gradient(135deg,#d97706,#b45309)",
+  Dinner:     "linear-gradient(135deg,#3730a3,#1e1b4b)",
+  Beach:      "linear-gradient(135deg,#0891b2,#1d4ed8)",
+  Activity:   "linear-gradient(135deg,#059669,#065f46)",
+  Shopping:   "linear-gradient(135deg,#7c3aed,#4f46e5)",
+  Other:      "linear-gradient(135deg,#475569,#1e293b)",
+};
+const catGradient = (cat: string) => CAT_GRADIENT[cat] ?? "linear-gradient(135deg,#374151,#111827)";
+
+function PlaceCard({ place }: { place: PlaceRow }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!key) return;
+    fetch(`/api/places/photo?name=${encodeURIComponent(place.place_name)}`)
+      .then(r => r.json())
+      .then(d => { if (d.url) setPhotoUrl(d.url); })
+      .catch(() => {});
+  }, [place.place_name]);
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl aspect-[3/4]"
+      style={{ background: photoUrl ? undefined : catGradient(place.category) }}
+    >
+      {photoUrl && (
+        <img
+          src={photoUrl}
+          alt={place.place_name}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      {/* Emoji centred (shown when no photo) */}
+      {!photoUrl && (
+        <div className="absolute inset-0 flex items-center justify-center text-5xl opacity-40">
+          {catEmoji(place.category)}
+        </div>
+      )}
+      {/* Bottom overlay */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 py-3 pt-8">
+        <p className="text-[12px] font-semibold text-white leading-snug line-clamp-2">
+          {place.place_name}
+        </p>
+        <p className="mt-0.5 text-[10px] text-white/60">
+          {catEmoji(place.category)} {place.category}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function LinearProgress({ value }: { value: number }) {
   return (
     <div className="h-[3px] w-full overflow-hidden rounded-full bg-primary/15">
@@ -501,15 +557,7 @@ export default function GroupHubPage() {
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         {catPlaces.map(place => (
-                          <div
-                            key={place.id}
-                            className="flex items-center gap-2.5 rounded-2xl bg-surface-container px-3 py-3"
-                          >
-                            <span className="text-xl shrink-0">{catEmoji(cat)}</span>
-                            <p className="text-[13px] font-medium text-on-surface leading-tight line-clamp-2">
-                              {place.place_name}
-                            </p>
-                          </div>
+                          <PlaceCard key={place.id} place={place} />
                         ))}
                       </div>
                     </div>
