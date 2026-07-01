@@ -42,8 +42,8 @@ function GroupCard({ group, waLinked }: { group: Group; waLinked: boolean }) {
     <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_6px_rgba(0,0,0,0.08)] transition-all active:scale-[0.99]">
       {waLinked && <div className="h-0.5 w-full bg-[#25d366]" />}
 
-      {/* Card header — info only, no navigation */}
-      <div className="flex items-center gap-3.5 px-4 pt-4 pb-3">
+      {/* Card header — tapping opens group detail */}
+      <Link href={`/groups/${group.id}`} className="flex items-center gap-3.5 px-4 pt-4 pb-3">
         <div
           className="relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl"
           style={{ backgroundColor: bg }}
@@ -92,7 +92,7 @@ function GroupCard({ group, waLinked }: { group: Group; waLinked: boolean }) {
             </div>
           )}
         </div>
-      </div>
+      </Link>
 
       {/* Divider */}
       <div className="mx-4 h-px bg-gray-100" />
