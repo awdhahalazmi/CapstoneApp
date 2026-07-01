@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeftIcon, SendIcon, PlusIcon, XIcon } from "@/components/icons";
+import { useRouter } from "next/navigation";
 import { useGroups } from "@/lib/groups-store";
 import { supabase } from "@/lib/supabase/client";
 import { useProfile, useSession } from "@/lib/supabase/use-session";
@@ -217,6 +218,7 @@ function CreatePollSheet({
 export default function GroupChatPage() {
   const params = useParams<{ id: string }>();
   const groupId = params.id;
+  const router = useRouter();
   const { groups } = useGroups();
   const { profile } = useProfile();
   const session = useSession();
@@ -558,8 +560,27 @@ export default function GroupChatPage() {
 
       {/* Input area */}
       <div className="shrink-0 bg-surface pb-safe">
+        {/* Quick actions */}
+        {profile && (
+          <div className="flex gap-2 px-4 pt-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setShowPollSheet(true)}
+              className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3.5 py-2 text-[13px] font-medium text-primary transition active:scale-95"
+            >
+              <span>📊</span> Poll
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/groups/${groupId}/plan-places`)}
+              className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3.5 py-2 text-[13px] font-medium text-primary transition active:scale-95"
+            >
+              <span>🗺️</span> Plan Places
+            </button>
+          </div>
+        )}
         {waRelayActive && (
-          <div className="flex items-center gap-2 px-4 py-1.5">
+          <div className="flex items-center gap-2 px-4 py-1">
             <div className="h-px flex-1 bg-outline-variant/30" />
             <span className="text-[10px] font-medium text-on-surface-variant/50">
               Messages also sent to WhatsApp
@@ -572,19 +593,8 @@ export default function GroupChatPage() {
             e.preventDefault();
             send();
           }}
-          className="flex items-center gap-2 px-4 py-3"
+          className="flex items-center gap-2 px-4 py-2.5"
         >
-          {/* Poll button — non-WA groups only */}
-          {!isWaGroup && profile && (
-            <button
-              type="button"
-              onClick={() => setShowPollSheet(true)}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/10 text-xl text-primary transition active:scale-95"
-              aria-label="Create poll"
-            >
-              📊
-            </button>
-          )}
 
           <div className="flex-1 overflow-hidden rounded-[28px] bg-surface-container">
             <input

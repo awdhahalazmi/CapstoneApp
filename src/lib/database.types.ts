@@ -492,6 +492,54 @@ export type Database = {
           },
         ]
       }
+      poll_place_results: {
+        Row: {
+          id: string
+          group_id: string
+          poll_id: string | null
+          place_name: string
+          category: string
+          vote_count: number
+          is_winner: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          poll_id?: string | null
+          place_name: string
+          category?: string
+          vote_count?: number
+          is_winner?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          poll_id?: string | null
+          place_name?: string
+          category?: string
+          vote_count?: number
+          is_winner?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "poll_place_results_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "poll_place_results_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_polls"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       places: {
         Row: {
           ai_reason: string | null
