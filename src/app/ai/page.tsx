@@ -91,6 +91,7 @@ export default function AiPage() {
   const [groupId, setGroupId] = useState<string | null>(null);
   const [waSentGroupId, setWaSentGroupId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const idRef = useRef(0);
   const pendingGroupIdRef = useRef<string | null>(null);
 
@@ -143,10 +144,9 @@ export default function AiPage() {
         throw new Error("AI is busy — please try again in a moment.");
       })();
     } catch (err) {
-      replyText = `Sorry, I couldn't respond right now. Please try again in a moment. (${err instanceof Error ? err.message : String(err)})`;
+      replyText = `Sorry, I couldn't respond right now. Please try again in a moment.`;
     }
 
-    // If a group was picked via chip and AI just created an event, send to WA
     const pickedGroupId = pendingGroupIdRef.current;
     if (pickedGroupId && isEventCreated(replyText)) {
       pendingGroupIdRef.current = null;
@@ -165,11 +165,11 @@ export default function AiPage() {
 
   const suggestions = selectedGroup
     ? [
-        `Suggest a place for ${selectedGroup.name}`,
+        `Plan for ${selectedGroup.name}`,
         "Somewhere outdoors",
-        "A budget-friendly spot",
+        "Budget-friendly spot",
       ]
-    : ["Plan something for tonight", "Find a quiet café", "Outdoor spot this weekend"];
+    : ["Plan for tonight", "Quiet café", "Outdoor this weekend"];
 
   const lastMsg = messages[messages.length - 1];
   const showGroupPicker =
@@ -179,39 +179,39 @@ export default function AiPage() {
     groups.length > 0;
 
   const waSentGroup = groups.find((g) => g.id === waSentGroupId);
+  const isOnlyGreeting = messages.length === 1;
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Header */}
-      <header className="flex items-center gap-3 border-b border-outline-variant/40 bg-surface/80 px-5 py-3.5 backdrop-blur-md">
-        <span className="fab h-10 w-10">
-          <AiIcon className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold leading-tight">AI Assistant</h1>
-          <p className="truncate text-[12px] text-on-surface-variant">
-            {selectedGroup
-              ? `Planning for ${selectedGroup.name}`
-              : "Plan an outing or ask anything"}
-          </p>
-        </div>
-        {/* WA sent toast */}
-        {waSentGroup && (
-          <span className="ml-auto shrink-0 rounded-full bg-green-100 px-3 py-1 text-[11px] font-semibold text-green-700">
-            ✓ Sent to {waSentGroup.name}
-          </span>
-        )}
-      </header>
+    <div className="flex min-h-[100dvh] flex-col bg-surface">
 
-      {/* Group selector */}
-      <div className="border-b border-outline-variant/40 px-4 py-2.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
-          Planning for
-        </p>
-        <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-20 bg-surface/90 backdrop-blur-md">
+        <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary">
+            <AiIcon className="h-5 w-5 text-on-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[18px] font-semibold leading-tight text-on-surface">AI Assistant</h1>
+            <p className="text-[12px] text-on-surface-variant">
+              {selectedGroup ? `Planning for ${selectedGroup.emoji} ${selectedGroup.name}` : "Plan outings in Kuwait"}
+            </p>
+          </div>
+          {waSentGroup && (
+            <span className="shrink-0 rounded-full bg-[#25d366]/15 px-3 py-1 text-[11px] font-semibold text-[#128c7e]">
+              ✓ Sent to {waSentGroup.name}
+            </span>
+          )}
+        </div>
+
+        {/* Group selector */}
+        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3">
           <button
             onClick={() => setGroupId(null)}
-            className={`chip ${groupId === null ? "chip-active" : ""}`}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all ${
+              groupId === null
+                ? "bg-primary text-on-primary"
+                : "bg-surface-container text-on-surface-variant"
+            }`}
           >
             Just me
           </button>
@@ -219,111 +219,138 @@ export default function AiPage() {
             <button
               key={g.id}
               onClick={() => setGroupId(g.id)}
-              className={`chip ${groupId === g.id ? "chip-active" : ""}`}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all ${
+                groupId === g.id
+                  ? "bg-primary text-on-primary"
+                  : "bg-surface-container text-on-surface-variant"
+              }`}
             >
-              <span aria-hidden>{g.emoji}</span>
+              <span>{g.emoji}</span>
               {g.name}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Messages */}
-      <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {messages.map((m) =>
-          m.role === "assistant" ? (
-            <div key={m.id} className="flex items-end gap-2">
-              <span className="fab h-7 w-7 shrink-0">
-                <AiIcon className="h-4 w-4" />
-              </span>
-              <div className="max-w-[80%] rounded-lg rounded-bl-sm bg-card px-3.5 py-2.5 text-sm shadow-soft">
-                <AssistantMessage content={m.content} />
-              </div>
-            </div>
-          ) : (
-            <div key={m.id} className="flex justify-end">
-              <div className="max-w-[80%] rounded-lg rounded-br-sm bg-primary px-3.5 py-2.5 text-sm text-on-primary">
-                {m.content}
-              </div>
-            </div>
-          ),
-        )}
+        <div className="h-px bg-outline-variant/30" />
+      </header>
 
-        {thinking && (
-          <div className="flex items-end gap-2">
-            <span className="fab h-7 w-7 shrink-0">
-              <AiIcon className="h-4 w-4" />
-            </span>
-            <div className="flex gap-1 rounded-lg rounded-bl-sm bg-card px-4 py-3 shadow-soft">
-              <Dot /> <Dot delay="150ms" /> <Dot delay="300ms" />
+      {/* ── Messages ────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[160px]">
+
+        {/* Empty state illustration */}
+        {isOnlyGreeting && (
+          <div className="mb-6 flex flex-col items-center gap-2 pt-2 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/10">
+              <AiIcon className="h-8 w-8 text-primary" />
             </div>
+            <p className="text-[13px] text-on-surface-variant">Powered by Grok 4.3</p>
           </div>
         )}
+
+        <div className="space-y-4">
+          {messages.map((m) =>
+            m.role === "assistant" ? (
+              <div key={m.id} className="flex items-end gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                  <AiIcon className="h-4 w-4 text-primary" />
+                </div>
+                <div className="max-w-[82%] rounded-[20px] rounded-bl-[6px] bg-surface-container px-4 py-3 text-[14px] leading-relaxed text-on-surface shadow-sm">
+                  <AssistantMessage content={m.content} />
+                </div>
+              </div>
+            ) : (
+              <div key={m.id} className="flex justify-end">
+                <div className="max-w-[78%] rounded-[20px] rounded-br-[6px] bg-primary px-4 py-3 text-[14px] leading-relaxed text-on-primary">
+                  {m.content}
+                </div>
+              </div>
+            ),
+          )}
+
+          {thinking && (
+            <div className="flex items-end gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                <AiIcon className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex items-center gap-1.5 rounded-[20px] rounded-bl-[6px] bg-surface-container px-4 py-3.5 shadow-sm">
+                <Dot /> <Dot delay="150ms" /> <Dot delay="300ms" />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div ref={endRef} />
       </div>
 
-      {/* Group picker — appears when AI asks which group */}
-      {showGroupPicker && (
-        <div className="border-t border-outline-variant/40 px-4 py-2.5">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
-            Select a group
-          </p>
-          <div className="no-scrollbar flex gap-2 overflow-x-auto">
-            {groups.map((g) => (
+      {/* ── Bottom bar (fixed above nav) ────────────────────────────── */}
+      <div className="fixed bottom-[56px] left-0 right-0 z-20 bg-surface/95 backdrop-blur-md">
+        <div className="h-px bg-outline-variant/30" />
+
+        {/* Group picker when AI asks */}
+        {showGroupPicker && (
+          <div className="px-4 pt-3 pb-2">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+              Select a group
+            </p>
+            <div className="no-scrollbar flex gap-2 overflow-x-auto">
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => {
+                    pendingGroupIdRef.current = g.id;
+                    send(`${g.emoji} ${g.name}`);
+                  }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface-container px-3.5 py-2 text-[13px] font-medium text-on-surface"
+                >
+                  <span>{g.emoji}</span>
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick suggestion chips */}
+        {!showGroupPicker && (
+          <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pt-3 pb-2">
+            {suggestions.map((s) => (
               <button
-                key={g.id}
-                className="chip"
-                onClick={() => {
-                  pendingGroupIdRef.current = g.id;
-                  send(`${g.emoji} ${g.name}`);
-                }}
+                key={s}
+                onClick={() => { send(s); inputRef.current?.focus(); }}
+                className="shrink-0 rounded-full border border-outline-variant/60 bg-surface px-3.5 py-1.5 text-[13px] text-on-surface-variant transition-colors active:bg-surface-container"
               >
-                <span aria-hidden>{g.emoji}</span>
-                {g.name}
+                {s}
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Quick suggestions */}
-      {!showGroupPicker && (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2">
-          {suggestions.map((s) => (
-            <button key={s} className="chip" onClick={() => send(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Input */}
-      <form
-        className="flex items-center gap-2 border-t border-outline-variant/40 bg-card px-4 py-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="input"
-          placeholder={
-            selectedGroup
-              ? `Ask about plans for ${selectedGroup.name}…`
-              : "Ask about places, plans, or budgets…"
-          }
-        />
-        <button
-          type="submit"
-          aria-label="Send"
-          disabled={!input.trim() || thinking}
-          className="fab h-12 w-12 shrink-0 disabled:opacity-40"
+        {/* Input row */}
+        <form
+          className="flex items-center gap-2 px-4 pt-1 pb-3"
+          onSubmit={(e) => { e.preventDefault(); send(input); }}
         >
-          <SendIcon className="h-5 w-5" />
-        </button>
-      </form>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={
+              selectedGroup
+                ? `Ask about plans for ${selectedGroup.name}…`
+                : "Ask about places, plans…"
+            }
+            className="min-w-0 flex-1 rounded-full border border-outline-variant/50 bg-surface-container px-4 py-3 text-[14px] text-on-surface placeholder:text-on-surface-variant/50 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
+          />
+          <button
+            type="submit"
+            aria-label="Send"
+            disabled={!input.trim() || thinking}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-on-primary shadow-sm transition disabled:opacity-40 active:scale-95"
+          >
+            <SendIcon className="h-5 w-5" />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -340,9 +367,9 @@ function AssistantMessage({ content }: { content: string }) {
     .trim();
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {cleaned.split("\n").map((line, i) => {
-        if (line.trim() === "") return <div key={i} className="h-1" />;
+        if (line.trim() === "") return <div key={i} className="h-1.5" />;
         return (
           <p key={i} className="leading-relaxed">
             {line}
@@ -356,7 +383,7 @@ function AssistantMessage({ content }: { content: string }) {
 function Dot({ delay = "0ms" }: { delay?: string }) {
   return (
     <span
-      className="h-2 w-2 animate-bounce rounded-full bg-outline"
+      className="h-2 w-2 animate-bounce rounded-full bg-primary/40"
       style={{ animationDelay: delay }}
     />
   );
