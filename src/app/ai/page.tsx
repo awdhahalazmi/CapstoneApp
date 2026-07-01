@@ -182,7 +182,7 @@ export default function AiPage() {
   const isOnlyGreeting = messages.length === 1;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-surface">
+    <div className="flex h-full flex-col bg-surface md:min-h-screen">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-20 bg-surface/90 backdrop-blur-md">
@@ -235,7 +235,7 @@ export default function AiPage() {
       </header>
 
       {/* ── Messages ────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-[160px]">
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-4">
 
         {/* Empty state illustration */}
         {isOnlyGreeting && (
@@ -282,8 +282,8 @@ export default function AiPage() {
         <div ref={endRef} />
       </div>
 
-      {/* ── Bottom bar (fixed above nav) ────────────────────────────── */}
-      <div className="fixed bottom-[56px] left-0 right-0 z-20 bg-surface/95 backdrop-blur-md">
+      {/* ── Bottom bar (sticky to flex bottom) ─────────────────────── */}
+      <div className="shrink-0 bg-surface/95 backdrop-blur-md">
         <div className="h-px bg-outline-variant/30" />
 
         {/* Group picker when AI asks */}
