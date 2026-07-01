@@ -672,29 +672,25 @@ export default function AIPlanPage() {
 
               <button
                 onClick={() => {
-                  timerStartedRef.current = false;
-                  autoPickedRef.current = false;
-                  setCountdown(null);
-                  setPhase("voting");
+                  const pick = tiedCards[Math.floor(Math.random() * tiedCards.length)];
+                  setWinnerIdx(pick.idx);
+                  setEventForm({ title: `Group Outing — ${pick.card.name}`, date: "", time: "", notes: "" });
+                  setPhase("winner");
                 }}
-                className="mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-[16px] font-semibold text-white shadow-[0_10px_28px_rgba(251,191,36,0.35)] transition active:scale-[0.97]"
+                className="mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-primary to-violet-500 text-[16px] font-semibold text-white shadow-[0_10px_28px_rgba(124,58,237,0.3)] transition active:scale-[0.97]"
               >
-                Vote Again to Break the Tie
+                🎲 Let AI Pick One
               </button>
               <button
                 onClick={() => {
                   timerStartedRef.current = false;
                   autoPickedRef.current = false;
                   setCountdown(null);
-                  setPoll(null);
-                  setPlaceCards([]);
-                  setMyVoteIdx(null);
-                  setWinnerIdx(null);
-                  setPhase("ready");
+                  setPhase("voting");
                 }}
-                className="mt-3 text-[13px] font-medium text-on-surface-variant"
+                className="mt-3 flex h-[46px] w-full items-center justify-center rounded-full border border-outline-variant/30 text-[14px] font-medium text-on-surface-variant transition active:scale-[0.97]"
               >
-                Start a new plan
+                Vote Again to Break the Tie
               </button>
             </div>
           );
