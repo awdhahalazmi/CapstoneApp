@@ -240,11 +240,9 @@ function PollCard({
 
   return (
     <div className="rounded-3xl bg-surface-container px-5 py-4">
-      {/* M3 Title Medium */}
       <p className="text-[16px] font-medium leading-snug text-on-surface">
         {poll.question}
       </p>
-      {/* M3 Body Small */}
       <p className="mt-1 text-[12px] text-on-surface-variant">
         {new Date(poll.created_at).toLocaleDateString("en", {
           month: "short",

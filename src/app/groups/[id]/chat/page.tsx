@@ -41,14 +41,12 @@ function PollBubble({
   poll,
   userVote,
   onVote,
-  memberCount,
 }: {
   poll: WAPoll;
   userVote: number | undefined;
   onVote: (idx: number) => void;
-  memberCount: number;
 }) {
-  const totalVotes = Object.values(poll.vote_counts ?? {}).reduce((a, b) => a + b, 0);
+  const total = Object.values(poll.vote_counts ?? {}).reduce((a, b) => a + b, 0);
   const hasVoted = userVote !== undefined;
 
   return (
@@ -61,7 +59,7 @@ function PollBubble({
       <div className="mt-3 space-y-2">
         {poll.options.map((opt, i) => {
           const count = poll.vote_counts?.[String(i)] ?? 0;
-          const pct = memberCount > 0 ? Math.round((count / memberCount) * 100) : 0;
+          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
           const isChosen = userVote === i;
           return (
             <button
@@ -93,7 +91,7 @@ function PollBubble({
         })}
       </div>
       <p className="mt-2.5 text-[11px] text-on-surface-variant">
-        {totalVotes} of {memberCount} voted
+        {total} vote{total !== 1 ? "s" : ""}
         {hasVoted ? " · You voted" : " · Tap an option to vote"}
       </p>
     </div>
@@ -293,6 +291,27 @@ export default function GroupChatPage() {
       .then(({ data }) => setPolls((data ?? []) as WAPoll[]));
   }, [groupId]);
 
+  // Refresh poll vote counts every 5 s so results stay live for all members
+  useEffect(() => {
+    if (!groupId) return;
+    const id = setInterval(async () => {
+      const { data } = await supabase
+        .from("whatsapp_polls")
+        .select("id, vote_counts")
+        .eq("group_id", groupId)
+        .is("wa_jid", null);
+      if (data && data.length > 0) {
+        setPolls((prev) =>
+          prev.map((p) => {
+            const fresh = data.find((d) => d.id === p.id);
+            return fresh ? { ...p, vote_counts: fresh.vote_counts } : p;
+          })
+        );
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [groupId]);
+
   // Restore votes from localStorage
   useEffect(() => {
     if (polls.length === 0) return;
@@ -467,7 +486,6 @@ export default function GroupChatPage() {
                     poll={poll}
                     userVote={userVotes[poll.id]}
                     onVote={(i) => votePoll(poll, i)}
-                    memberCount={group?.members.length ?? 1}
                   />
                 </div>
               );
