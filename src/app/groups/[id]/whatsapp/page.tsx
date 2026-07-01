@@ -230,12 +230,13 @@ export default function WAGroupPage() {
       .then(({ data }) => setWaJid(data?.wa_jid ?? null));
   }, [userId, groupId]);
 
-  // Load polls and refresh every 3s
+  // Load only the most recent poll and refresh every 3s
   const loadPolls = () => {
     supabase.from("whatsapp_polls")
       .select("id, question, options, vote_counts, wa_message_id, created_at, created_by, source")
       .eq("group_id", groupId)
       .order("created_at", { ascending: false })
+      .limit(1)
       .then(({ data }) => {
         if (data) setPolls(data as WAPoll[]);
         setLoading(false);
@@ -250,8 +251,7 @@ export default function WAGroupPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
 
-  const aiPolls = polls.filter(p => p.source === "plan_command");
-  const adminPolls = polls.filter(p => p.source !== "plan_command");
+  const latestPoll = polls[0] ?? null;
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-surface">
@@ -296,33 +296,20 @@ export default function WAGroupPage() {
               ✨ Start AI Plan
             </Link>
           </div>
-        ) : (
-          <div className="space-y-5">
-            {/* AI Plan polls */}
-            {aiPolls.length > 0 && (
-              <section>
-                <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-primary">AI Place Polls</p>
-                <div className="space-y-3">
-                  {aiPolls.map(p => (
-                    <PollCard key={p.id} poll={p} isOwner={p.created_by === userId} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Admin polls */}
-            {adminPolls.length > 0 && (
-              <section>
-                <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-on-surface-variant">Group Polls</p>
-                <div className="space-y-3">
-                  {adminPolls.map(p => (
-                    <PollCard key={p.id} poll={p} isOwner={p.created_by === userId} />
-                  ))}
-                </div>
-              </section>
-            )}
+        ) : latestPoll ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-on-surface-variant">Live Poll</p>
+              <Link
+                href={`/groups/${groupId}/plan`}
+                className="text-[12px] font-semibold text-primary"
+              >
+                View history →
+              </Link>
+            </div>
+            <PollCard key={latestPoll.id} poll={latestPoll} isOwner={latestPoll.created_by === userId} />
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Bottom bar */}
