@@ -198,6 +198,36 @@ export default function PlanPlacesPage() {
   const [savedFilterCats, setSavedFilterCats] = useState<string[]>([]);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Google Places autocomplete
+  type Prediction = { placeId: string; mainText: string; secondaryText: string };
+  const [suggestions, setSuggestions] = useState<Prediction[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  function fetchSuggestions(input: string) {
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    if (input.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
+    suggestTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(input)}`);
+        const data = await res.json();
+        if (data.predictions?.length) {
+          setSuggestions(data.predictions);
+          setShowSuggestions(true);
+        } else {
+          setSuggestions([]);
+          setShowSuggestions(false);
+        }
+      } catch { /* silently ignore */ }
+    }, 300);
+  }
+
+  function pickSuggestion(name: string) {
+    setInputValues(prev => ({ ...prev, [activeCat]: name }));
+    setSuggestions([]);
+    setShowSuggestions(false);
+  }
 
   // When categories change, set active tab to first one
   useEffect(() => {
@@ -779,23 +809,56 @@ export default function PlanPlacesPage() {
               <span className="text-[13px] text-on-surface-variant">— add your places</span>
             </div>
 
-            {/* Input row */}
-            <div className="mb-4 flex gap-2">
-              <input
-                key={activeCat}
-                value={inputValues[activeCat] ?? ""}
-                onChange={e => setInputValues(prev => ({ ...prev, [activeCat]: e.target.value }))}
-                onKeyDown={e => { if (e.key === "Enter") addPlace(activeCat); }}
-                placeholder={`e.g. Paul, ${activeCat === "Café" ? "Mojo" : activeCat === "Restaurant" ? "Slider Station" : "Add a place"}…`}
-                className="flex-1 rounded-2xl border border-outline-variant bg-surface-container px-4 py-3 text-[14px] text-on-surface placeholder:text-on-surface-variant/50 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-              />
-              <button
-                onClick={() => addPlace(activeCat)}
-                disabled={!(inputValues[activeCat] ?? "").trim()}
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-on-primary shadow-sm disabled:opacity-40 transition active:scale-95"
-              >
-                <PlusIcon className="h-5 w-5" />
-              </button>
+            {/* Input row with Google Places autocomplete */}
+            <div className="relative mb-4">
+              <div className="flex gap-2">
+                <input
+                  key={activeCat}
+                  value={inputValues[activeCat] ?? ""}
+                  onChange={e => {
+                    setInputValues(prev => ({ ...prev, [activeCat]: e.target.value }));
+                    fetchSuggestions(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { addPlace(activeCat); setShowSuggestions(false); }
+                    if (e.key === "Escape") setShowSuggestions(false);
+                  }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  onFocus={() => { if (suggestions.length) setShowSuggestions(true); }}
+                  placeholder={`Search a place in Kuwait…`}
+                  autoComplete="off"
+                  className="flex-1 rounded-2xl border border-outline-variant bg-surface-container px-4 py-3 text-[14px] text-on-surface placeholder:text-on-surface-variant/50 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  onClick={() => { addPlace(activeCat); setShowSuggestions(false); }}
+                  disabled={!(inputValues[activeCat] ?? "").trim()}
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-on-primary shadow-sm disabled:opacity-40 transition active:scale-95"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Autocomplete dropdown */}
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute left-0 right-12 top-full z-30 mt-1 overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-xl">
+                  {suggestions.map(s => (
+                    <button
+                      key={s.placeId}
+                      onMouseDown={() => pickSuggestion(s.mainText)}
+                      className="flex w-full flex-col px-4 py-3 text-left transition hover:bg-surface-container active:bg-surface-container"
+                    >
+                      <span className="text-[14px] font-medium text-on-surface">{s.mainText}</span>
+                      {s.secondaryText && (
+                        <span className="text-[12px] text-on-surface-variant">{s.secondaryText}</span>
+                      )}
+                    </button>
+                  ))}
+                  <div className="flex items-center justify-end gap-1 border-t border-outline-variant/40 px-3 py-1.5">
+                    <span className="text-[10px] text-on-surface-variant/50">powered by</span>
+                    <span className="text-[11px] font-semibold text-on-surface-variant/60">Google</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Places for this category */}
