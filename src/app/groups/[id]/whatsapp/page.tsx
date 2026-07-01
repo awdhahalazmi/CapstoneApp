@@ -457,7 +457,7 @@ export default function WAGroupPage() {
       {/* Header */}
       <header className="sticky top-0 z-20 shrink-0 border-b border-outline-variant/20 bg-surface/95 backdrop-blur-md">
         <div className="flex items-center gap-1 px-2 py-2">
-          <Link href={`/groups/${groupId}`} className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
+          <Link href="/groups" className="grid h-12 w-12 shrink-0 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
             <ArrowLeftIcon />
           </Link>
           <div className="min-w-0 flex-1 px-1">

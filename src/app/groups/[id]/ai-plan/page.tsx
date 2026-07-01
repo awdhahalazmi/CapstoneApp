@@ -587,7 +587,7 @@ export default function OutingPlannerPage() {
         <p className="text-[40px]">👑</p>
         <p className="mt-2 text-[15px] font-semibold text-on-surface">Owner only</p>
         <p className="mt-1 text-[13px] text-on-surface-variant">Only {group.name}&apos;s owner can plan outings via WhatsApp.</p>
-        <Link href={`/groups/${group.id}`} className="mt-5 rounded-full border border-outline px-5 py-2.5 text-[14px] font-medium text-on-surface">Back to group</Link>
+        <Link href="/groups" className="mt-5 rounded-full border border-outline px-5 py-2.5 text-[14px] font-medium text-on-surface">Back to group</Link>
       </div>
     );
   }
@@ -622,7 +622,7 @@ export default function OutingPlannerPage() {
             <ArrowLeftIcon />
           </button>
         ) : (
-          <Link href={`/groups/${group.id}`} className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
+          <Link href="/groups" className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
             <ArrowLeftIcon />
           </Link>
         )}
@@ -1026,7 +1026,7 @@ export default function OutingPlannerPage() {
                 <p className="mt-1 text-[12px] opacity-80">🔔 {selectedReminders.length} reminder{selectedReminders.length !== 1 ? "s" : ""} scheduled</p>
               )}
             </div>
-            <Link href={`/groups/${group.id}`}
+            <Link href="/groups"
               className="block w-full rounded-full border border-outline py-3 text-center text-[14px] font-medium text-on-surface hover:bg-on-surface/6">
               Back to group
             </Link>
