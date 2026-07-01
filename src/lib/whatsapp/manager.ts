@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { initReminderScheduler } from "./reminder-scheduler";
+import { handlePlanCommand } from "./plan-command";
 
 export interface WAGroup {
   id: string;
@@ -567,6 +568,14 @@ class WhatsAppManager {
           const entry: WAInMemoryMessage = { id: msgId, senderJid, senderName, isFromMe, timestampMs, ...parsed };
           this._storeMessage(userId, session, remoteJid, entry);
           console.log(`[WA] ${parsed.msgType} from ${senderName}: ${parsed.text?.slice(0, 40) || ""}`);
+
+          // ── /plan command ─────────────────────────────────────────────────
+          if (!isFromMe && parsed.text?.trim() === "/plan") {
+            const gName = session.groups.find((g) => g.id === remoteJid)?.name ?? "your group";
+            handlePlanCommand(this, userId, remoteJid, gName).catch((e) =>
+              console.error("[WA] /plan handler error:", e),
+            );
+          }
 
           // Async: upgrade sticker to full WebP
           if (parsed.msgType === "sticker") {
