@@ -286,7 +286,7 @@ export default function GroupChatPage() {
       .from("whatsapp_polls")
       .select("*")
       .eq("group_id", groupId)
-      .is("wa_jid", null)
+      .or("wa_jid.is.null,wa_jid.eq.")
       .order("created_at", { ascending: true })
       .then(({ data }) => setPolls((data ?? []) as WAPoll[]));
   }, [groupId]);
@@ -299,7 +299,7 @@ export default function GroupChatPage() {
         .from("whatsapp_polls")
         .select("id, vote_counts")
         .eq("group_id", groupId)
-        .is("wa_jid", null);
+        .or("wa_jid.is.null,wa_jid.eq.");
       if (data && data.length > 0) {
         setPolls((prev) =>
           prev.map((p) => {
@@ -356,7 +356,7 @@ export default function GroupChatPage() {
           { event: "INSERT", schema: "public", table: "whatsapp_polls", filter: `group_id=eq.${groupId}` },
           (payload) => {
             const newPoll = payload.new as WAPoll;
-            if (newPoll.wa_jid !== null) return;
+            if (newPoll.wa_jid !== "" && newPoll.wa_jid !== null) return;
             setPolls((prev) => {
               if (prev.some((p) => p.id === newPoll.id)) return prev;
               return [...prev, newPoll];
