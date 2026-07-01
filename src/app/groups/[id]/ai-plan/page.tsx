@@ -348,15 +348,25 @@ export default function AIPlanPage() {
 
   async function vote(idx: number) {
     if (!poll || myVoteIdx === idx) return;
-    const newCounts = { ...(poll.vote_counts ?? {}) };
-    if (myVoteIdx !== null) {
-      newCounts[String(myVoteIdx)] = Math.max(0, (newCounts[String(myVoteIdx)] ?? 1) - 1);
-    }
-    newCounts[String(idx)] = (newCounts[String(idx)] ?? 0) + 1;
-    setPoll((p) => p ? { ...p, vote_counts: newCounts } : p);
+    const prevIdx = myVoteIdx;
+    // Optimistic update so the tap feels instant
+    setPoll((p) => {
+      if (!p) return p;
+      const c = { ...(p.vote_counts ?? {}) };
+      if (prevIdx !== null) c[String(prevIdx)] = Math.max(0, (c[String(prevIdx)] ?? 1) - 1);
+      c[String(idx)] = (c[String(idx)] ?? 0) + 1;
+      return { ...p, vote_counts: c };
+    });
     setMyVoteIdx(idx);
     localStorage.setItem(`vote_${poll.id}`, String(idx));
-    await supabase.from("whatsapp_polls").update({ vote_counts: newCounts }).eq("id", poll.id);
+    // Atomic server-side increment — no race condition when two people vote simultaneously
+    const { data } = await supabase.rpc("cast_vote", {
+      p_poll_id: poll.id,
+      p_old_idx: prevIdx ?? -1,
+      p_new_idx: idx,
+    });
+    // Reconcile with the authoritative counts returned by the RPC
+    if (data) setPoll((p) => p ? { ...p, vote_counts: data as Record<string, number> } : p);
   }
 
   function pickWinner() {
