@@ -513,7 +513,7 @@ export default function AIPlanPage() {
             </div>
 
             {/* Chart-style vote cards */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {placeCards.map((card, idx) => {
                 const count = poll?.vote_counts?.[String(idx)] ?? 0;
                 const pct = total > 0 ? Math.round((count / total) * 100) : 0;
@@ -526,57 +526,54 @@ export default function AIPlanPage() {
                   <button
                     key={card.id}
                     onClick={() => vote(idx)}
-                    className={`w-full overflow-hidden rounded-2xl border text-left transition-all duration-200 active:scale-[0.98]
+                    className={`w-full overflow-hidden rounded-xl border text-left transition-all duration-200 active:scale-[0.98]
                       ${isLeading
-                        ? "border-primary/30 bg-primary/6 shadow-[0_2px_16px_rgba(124,58,237,0.18)]"
-                        : "border-outline-variant/20 bg-surface-container"
+                        ? "border-primary/25 bg-primary/5 shadow-[0_1px_8px_rgba(124,58,237,0.12)]"
+                        : "border-outline-variant/15 bg-surface-container"
                       }`}
                   >
-                    <div className="px-4 py-3">
+                    <div className="px-3 py-2.5">
                       {/* Top row: rank · name · % */}
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black
+                      <div className="flex items-center gap-2">
+                        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black
                           ${isLeading ? "bg-primary text-white" : "bg-on-surface/10 text-on-surface-variant"}`}>
                           {rank}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[14px] font-bold leading-tight text-on-surface">{card.name}</p>
-                          <p className="truncate text-[11px] text-on-surface-variant">{card.address}</p>
+                          <p className="truncate text-[13px] font-semibold leading-tight text-on-surface">{card.name}</p>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <p className={`text-[28px] font-black leading-none tabular-nums
-                            ${isLeading ? "text-primary" : total === 0 ? "text-on-surface/20" : "text-on-surface/50"}`}>
-                            {pct}%
-                          </p>
-                          <p className="text-[10px] text-on-surface-variant">{count} vote{count !== 1 ? "s" : ""}</p>
-                        </div>
+                        <p className={`shrink-0 text-[18px] font-black tabular-nums leading-none
+                          ${isLeading ? "text-primary" : total === 0 ? "text-on-surface/20" : "text-on-surface/40"}`}>
+                          {pct}%
+                        </p>
                       </div>
 
-                      {/* Thick bar */}
-                      <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-on-surface/8">
+                      {/* Bar */}
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-on-surface/8">
                         <div
                           className={`h-full rounded-full transition-all duration-700 ease-out
-                            ${isLeading ? "bg-gradient-to-r from-primary to-violet-500" : "bg-primary/35"}`}
+                            ${isLeading ? "bg-gradient-to-r from-primary to-violet-500" : "bg-primary/30"}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
 
-                      {/* Tags */}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="text-sm">{emoji}</span>
-                        {isLeading && <span className="text-[10px] font-bold text-primary">🏆 Leading</span>}
+                      {/* Meta row */}
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <span className="text-xs">{emoji}</span>
+                        {card.rating && <span className="text-[10px] text-on-surface-variant">★ {card.rating.toFixed(1)}</span>}
+                        {card.openNow !== null && (
+                          <span className={`text-[10px] ${card.openNow ? "text-emerald-500" : "text-on-surface-variant/50"}`}>
+                            {card.openNow ? "● Open" : "Closed"}
+                          </span>
+                        )}
+                        <span className="flex-1" />
+                        {isLeading && <span className="text-[10px] font-semibold text-primary">🏆 Leading</span>}
                         {isMyVote && (
-                          <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
                             Your vote ✓
                           </span>
                         )}
-                        {card.rating && <span className="text-[10px] text-on-surface-variant">★ {card.rating.toFixed(1)}</span>}
-                        {card.price && <span className="text-[10px] text-on-surface-variant">{card.price}</span>}
-                        {card.openNow !== null && (
-                          <span className={`text-[10px] font-medium ${card.openNow ? "text-emerald-500" : "text-red-400"}`}>
-                            {card.openNow ? "● Open" : "● Closed"}
-                          </span>
-                        )}
+                        <span className="text-[10px] text-on-surface-variant">{count} vote{count !== 1 ? "s" : ""}</span>
                       </div>
                     </div>
                   </button>
