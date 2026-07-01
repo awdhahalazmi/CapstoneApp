@@ -611,7 +611,7 @@ export default function Home() {
         <section className="px-5 pt-4">
           <div className="flex items-center justify-between mb-2.5">
             <p className="text-sm font-bold">Your squad</p>
-            <Link href="/community" className="text-[13px] font-semibold text-primary">See all</Link>
+            <Link href="/friends" className="text-[13px] font-semibold text-primary">See all</Link>
           </div>
           <div className="no-scrollbar flex gap-3 overflow-x-auto">
             {friends.slice(0, 8).map((f) => {
@@ -639,6 +639,23 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      {/* Invite friends card */}
+      <section className="px-5 pt-4">
+        <Link
+          href="/friends"
+          className="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-primary/10 to-violet-500/10 border border-primary/15 px-4 py-4 transition active:scale-[0.98]"
+        >
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/15 text-xl">
+            👥
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[15px] font-semibold text-on-surface">Find &amp; invite friends</p>
+            <p className="text-[12px] text-on-surface-variant">Grow your squad — search by username</p>
+          </div>
+          <span className="text-primary text-lg">›</span>
+        </Link>
+      </section>
 
       {/* Upcoming events created via AI Plan Event */}
       {upcomingEvents.length > 0 && (

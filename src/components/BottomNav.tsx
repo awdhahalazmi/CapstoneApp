@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   HomeIcon,
-  CommunityIcon,
   AiIcon,
   GroupsIcon,
   ProfileIcon,
@@ -12,7 +11,6 @@ import {
 
 const tabs = [
   { href: "/", label: "Home", Icon: HomeIcon },
-  { href: "/community", label: "Community", Icon: CommunityIcon },
   { href: "/ai", label: "AI", Icon: AiIcon },
   { href: "/groups", label: "Groups", Icon: GroupsIcon },
   { href: "/profile", label: "Profile", Icon: ProfileIcon },
