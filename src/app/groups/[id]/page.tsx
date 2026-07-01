@@ -57,6 +57,18 @@ type EventRow = {
   sent_at: string | null;
 };
 
+type PlaceRow = {
+  id: string;
+  place_name: string;
+  category: string;
+};
+
+const CAT_EMOJI: Record<string, string> = {
+  Café: "☕", Restaurant: "🍽️", Dessert: "🍰", Breakfast: "🥐",
+  Dinner: "🌙", Beach: "🏖️", Activity: "🎯", Shopping: "🛍️", Other: "✨",
+};
+const catEmoji = (cat: string) => CAT_EMOJI[cat] ?? "📍";
+
 function LinearProgress({ value }: { value: number }) {
   return (
     <div className="h-[3px] w-full overflow-hidden rounded-full bg-primary/15">
@@ -202,11 +214,12 @@ export default function GroupHubPage() {
   const [waConnected, setWaConnected] = useState(false);
   const [showPollSheet, setShowPollSheet] = useState(false);
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [places, setPlaces] = useState<PlaceRow[]>([]);
 
   useEffect(() => {
     if (!userId || !params.id) return;
     async function load() {
-      const [{ data: link }, statusRes, { data: pollData }, { data: eventData }] = await Promise.all([
+      const [{ data: link }, statusRes, { data: pollData }, { data: eventData }, { data: placeData }] = await Promise.all([
         supabase.from("whatsapp_group_links").select("wa_jid")
           .eq("group_id", params.id).eq("user_id", userId).maybeSingle(),
         fetch(`/api/whatsapp/status?userId=${userId}`).then(r => r.json()).catch(() => ({})),
@@ -214,11 +227,14 @@ export default function GroupHubPage() {
           .eq("group_id", params.id).order("created_at", { ascending: false }).limit(3),
         supabase.from("events").select("id, title, place_name, event_date, event_time, sent_at")
           .eq("group_id", params.id).order("event_date", { ascending: true }).limit(5),
+        supabase.from("poll_place_results").select("id, place_name, category")
+          .eq("group_id", params.id).is("poll_id", null).order("category").order("created_at", { ascending: false }),
       ]);
       setWaJid(link?.wa_jid ?? null);
       setWaConnected(statusRes?.status === "connected");
       setPolls((pollData ?? []) as WAPoll[]);
       setEvents((eventData ?? []) as EventRow[]);
+      setPlaces((placeData ?? []) as PlaceRow[]);
     }
     load();
   }, [userId, params.id]);
@@ -441,6 +457,72 @@ export default function GroupHubPage() {
                 View all polls →
               </Link>
             </div>
+          )}
+        </section>
+
+        {/* ── Places Grid ──────────────────────────────── */}
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[16px] font-medium text-on-surface">Saved Places</h2>
+            <Link
+              href={`/groups/${group.id}/plan-places`}
+              className="rounded-full px-3 py-1 text-[13px] font-medium text-primary hover:bg-primary/8"
+            >
+              {places.length > 0 ? "Manage" : "Add places"}
+            </Link>
+          </div>
+
+          {places.length === 0 ? (
+            <div className="rounded-2xl border border-outline-variant/50 py-8 text-center">
+              <p className="text-[32px]">📍</p>
+              <p className="mt-2 text-[14px] font-medium text-on-surface">No places saved yet</p>
+              <p className="mt-0.5 text-[12px] text-on-surface-variant">Add spots your group loves to visit</p>
+              <Link
+                href={`/groups/${group.id}/plan-places`}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[13px] font-medium text-on-primary"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add places
+              </Link>
+            </div>
+          ) : (
+            (() => {
+              const byCat: Record<string, PlaceRow[]> = {};
+              places.forEach(p => {
+                if (!byCat[p.category]) byCat[p.category] = [];
+                byCat[p.category].push(p);
+              });
+              return (
+                <div className="space-y-4">
+                  {Object.entries(byCat).map(([cat, catPlaces]) => (
+                    <div key={cat}>
+                      <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                        <span>{catEmoji(cat)}</span>{cat}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {catPlaces.map(place => (
+                          <div
+                            key={place.id}
+                            className="flex items-center gap-2.5 rounded-2xl bg-surface-container px-3 py-3"
+                          >
+                            <span className="text-xl shrink-0">{catEmoji(cat)}</span>
+                            <p className="text-[13px] font-medium text-on-surface leading-tight line-clamp-2">
+                              {place.place_name}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <Link
+                    href={`/groups/${group.id}/plan-places`}
+                    className="block rounded-xl py-2 text-center text-[13px] font-medium text-primary hover:bg-primary/8"
+                  >
+                    Manage places →
+                  </Link>
+                </div>
+              );
+            })()
           )}
         </section>
 
