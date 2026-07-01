@@ -22,25 +22,6 @@ type AISuggestion = {
   places: { name: string; area: string; reason: string; emoji: string }[];
 };
 
-function generateTimeSlots(): string[] {
-  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const slots: string[] = [];
-  const now = new Date();
-  for (let d = 1; d <= 10 && slots.length < 6; d++) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + d);
-    const times = (date.getDay() === 5 || date.getDay() === 6)
-      ? ["6:00 PM", "8:00 PM"]
-      : ["7:00 PM"];
-    for (const t of times) {
-      if (slots.length < 6) {
-        slots.push(`${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()} · ${t}`);
-      }
-    }
-  }
-  return slots;
-}
 
 async function sbGet(path: string): Promise<unknown[] | null> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -112,63 +93,33 @@ export async function handlePlanCommand(
   inProgress.add(groupJid);
 
   try {
-    await wa.sendText(userId, groupJid, `🤖 Planning your outing for *${groupName}*… give me a moment!`);
+    await wa.sendText(userId, groupJid, `🤖 Finding the best spots for *${groupName}*…`);
 
-    // Resolve group_id from DB so polls appear in the app
+    // Get AI suggestions
+    const suggestion = await askAI(groupName);
+
+    // Send ONE places poll
+    const question = `Where should we go? 📍`;
+    const options = suggestion.places.map((p) => p.name);
+    const { messageId } = await wa.sendPoll(userId, groupJid, question, options);
+
+    // Resolve group_id and persist poll so it appears in the Beyond Kw app
     const links = await sbGet(
       `whatsapp_group_links?wa_jid=eq.${encodeURIComponent(groupJid)}&select=group_id,user_id&limit=1`,
     );
     const groupId: string | null = (links?.[0] as { group_id?: string })?.group_id ?? null;
     const createdBy: string | null = (links?.[0] as { user_id?: string })?.user_id ?? userId;
 
-    // Get AI suggestions
-    const suggestion = await askAI(groupName);
-
-    // Send formatted suggestion message
-    const placesText = suggestion.places
-      .map((p, i) => `${i + 1}. ${p.emoji} *${p.name}* — ${p.area}\n   _${p.reason}_`)
-      .join("\n");
-    await wa.sendText(
-      userId,
-      groupJid,
-      `✨ *AI Outing Idea: ${suggestion.outingType}*\n\n${suggestion.reason}\n\n*Top picks:*\n${placesText}\n\n_Sending polls now…_`,
-    );
-
-    // Poll 1 — places
-    const placeQ = `Which place for our ${suggestion.outingType}? 📍`;
-    const placeOpts = suggestion.places.map((p) => p.name);
-    const { messageId: placeMsgId } = await wa.sendPoll(userId, groupJid, placeQ, placeOpts);
-
-    // Small delay so two polls don't arrive simultaneously
-    await new Promise((r) => setTimeout(r, 1500));
-
-    // Poll 2 — time
-    const timeQ = "When should we meet? 📅";
-    const timeOpts = generateTimeSlots();
-    const { messageId: timeMsgId } = await wa.sendPoll(userId, groupJid, timeQ, timeOpts);
-
-    // Persist both polls so they show up in the Beyond Kw app
     if (groupId && createdBy) {
-      await Promise.all([
-        sbInsert("whatsapp_polls", {
-          group_id: groupId,
-          wa_jid: groupJid,
-          wa_message_id: placeMsgId,
-          question: placeQ,
-          options: placeOpts,
-          vote_counts: {},
-          created_by: createdBy,
-        }),
-        sbInsert("whatsapp_polls", {
-          group_id: groupId,
-          wa_jid: groupJid,
-          wa_message_id: timeMsgId,
-          question: timeQ,
-          options: timeOpts,
-          vote_counts: {},
-          created_by: createdBy,
-        }),
-      ]);
+      await sbInsert("whatsapp_polls", {
+        group_id: groupId,
+        wa_jid: groupJid,
+        wa_message_id: messageId,
+        question,
+        options,
+        vote_counts: {},
+        created_by: createdBy,
+      });
     }
 
     console.log(`[WA] /plan completed for ${groupJid}`);
