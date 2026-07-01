@@ -500,55 +500,83 @@ export default function AIPlanPage() {
         {/* ── VOTING ── */}
         {phase === "voting" && placeCards.length > 0 && (
           <div className="px-4 pt-4">
-            <div className="mb-4 rounded-2xl bg-primary/6 px-4 py-3">
-              <p className="text-[13px] font-semibold text-primary">
-                {total === 0 ? "Tap a place to cast your vote" : `${total} vote${total !== 1 ? "s" : ""} so far — tap to change yours`}
+            {/* Header bar */}
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-on-surface-variant">
+                {total === 0 ? "Tap a place to cast your vote" : `${total} vote${total !== 1 ? "s" : ""} so far`}
               </p>
+              {countdown !== null && (
+                <span className="rounded-full bg-primary px-3 py-1 text-[12px] font-bold text-white">
+                  🤖 {countdown}s
+                </span>
+              )}
             </div>
 
-            <div className="space-y-3">
+            {/* Chart-style vote cards */}
+            <div className="space-y-2">
               {placeCards.map((card, idx) => {
                 const count = poll?.vote_counts?.[String(idx)] ?? 0;
                 const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                 const isMyVote = myVoteIdx === idx;
-                const gradient = cardGradient(card.types);
+                const maxCount = Math.max(...placeCards.map((_, i) => poll?.vote_counts?.[String(i)] ?? 0), 0);
+                const isLeading = total > 0 && count === maxCount && count > 0;
+                const rank = placeCards.filter((_, i) => (poll?.vote_counts?.[String(i)] ?? 0) > count).length + 1;
                 const emoji = cardEmoji(card.types);
                 return (
                   <button
                     key={card.id}
                     onClick={() => vote(idx)}
-                    className={`w-full rounded-3xl text-left transition-all active:scale-[0.98] ${isMyVote ? "ring-2 ring-primary ring-offset-2 shadow-[0_4px_20px_rgba(124,58,237,0.25)]" : "shadow-sm"}`}
+                    className={`w-full overflow-hidden rounded-2xl border text-left transition-all duration-200 active:scale-[0.98]
+                      ${isLeading
+                        ? "border-primary/30 bg-primary/6 shadow-[0_2px_16px_rgba(124,58,237,0.18)]"
+                        : "border-outline-variant/20 bg-surface-container"
+                      }`}
                   >
-                    <div className={`relative overflow-hidden rounded-t-3xl bg-gradient-to-r ${gradient} px-4 py-4`}>
-                      <div className="flex items-start gap-3">
-                        <span className="text-3xl">{emoji}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[16px] font-bold leading-tight text-white">{card.name}</p>
-                          <p className="mt-0.5 truncate text-[12px] text-white/75">{card.address}</p>
+                    <div className="px-4 py-3">
+                      {/* Top row: rank · name · % */}
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-black
+                          ${isLeading ? "bg-primary text-white" : "bg-on-surface/10 text-on-surface-variant"}`}>
+                          {rank}
                         </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[14px] font-bold leading-tight text-on-surface">{card.name}</p>
+                          <p className="truncate text-[11px] text-on-surface-variant">{card.address}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className={`text-[28px] font-black leading-none tabular-nums
+                            ${isLeading ? "text-primary" : total === 0 ? "text-on-surface/20" : "text-on-surface/50"}`}>
+                            {pct}%
+                          </p>
+                          <p className="text-[10px] text-on-surface-variant">{count} vote{count !== 1 ? "s" : ""}</p>
+                        </div>
+                      </div>
+
+                      {/* Thick bar */}
+                      <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-on-surface/8">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out
+                            ${isLeading ? "bg-gradient-to-r from-primary to-violet-500" : "bg-primary/35"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+
+                      {/* Tags */}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-sm">{emoji}</span>
+                        {isLeading && <span className="text-[10px] font-bold text-primary">🏆 Leading</span>}
                         {isMyVote && (
-                          <span className="shrink-0 rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-bold text-white">
-                            Your Vote ✓
+                          <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                            Your vote ✓
                           </span>
                         )}
-                      </div>
-                      <div className="mt-2 flex items-center gap-3">
-                        {card.rating && <span className="text-[12px] font-semibold text-white/90">★ {card.rating.toFixed(1)}</span>}
-                        {card.price && <span className="text-[12px] text-white/75">{card.price}</span>}
+                        {card.rating && <span className="text-[10px] text-on-surface-variant">★ {card.rating.toFixed(1)}</span>}
+                        {card.price && <span className="text-[10px] text-on-surface-variant">{card.price}</span>}
                         {card.openNow !== null && (
-                          <span className={`text-[11px] font-semibold ${card.openNow ? "text-green-200" : "text-red-200"}`}>
-                            {card.openNow ? "Open now" : "Closed"}
+                          <span className={`text-[10px] font-medium ${card.openNow ? "text-emerald-500" : "text-red-400"}`}>
+                            {card.openNow ? "● Open" : "● Closed"}
                           </span>
                         )}
-                      </div>
-                    </div>
-                    <div className="rounded-b-3xl bg-surface-container px-4 py-3">
-                      <div className="mb-1.5 flex justify-between">
-                        <span className="text-[12px] font-medium text-on-surface-variant">{count} vote{count !== 1 ? "s" : ""}</span>
-                        <span className="text-[12px] font-bold text-primary">{pct}%</span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-primary/12">
-                        <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   </button>
@@ -556,14 +584,9 @@ export default function AIPlanPage() {
               })}
             </div>
 
-            {countdown !== null ? (
-              <div className="mt-4 rounded-2xl bg-primary px-4 py-3 text-center">
-                <p className="text-[15px] font-bold text-white">🤖 AI picks the winner in {countdown}s…</p>
-              </div>
-            ) : total > 0 ? (
+            {countdown === null && total > 0 && (
               <p className="mt-4 text-center text-[13px] font-medium text-primary">👀 AI is watching votes…</p>
-            ) : null}
-
+            )}
             {waJid && (
               <p className="mt-3 text-center text-[12px] text-on-surface-variant">
                 📱 Poll also sent to your WhatsApp group
