@@ -1,4 +1,4 @@
-const PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
+const SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const KUWAIT_LAT = 29.3759;
 const KUWAIT_LNG = 47.9774;
 
@@ -14,19 +14,6 @@ const PRICE_MAP: Record<string, string> = {
   PRICE_LEVEL_EXPENSIVE: "$$$",
   PRICE_LEVEL_VERY_EXPENSIVE: "$$$$",
 };
-
-async function resolvePhotoUrl(photoName: string, apiKey: string): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&skipHttpRedirect=true&key=${apiKey}`
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.photoUri ?? null;
-  } catch {
-    return null;
-  }
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -50,7 +37,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const res = await fetch(PLACES_URL, {
+    const res = await fetch(SEARCH_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -63,12 +50,13 @@ Deno.serve(async (req: Request) => {
           "places.userRatingCount",
           "places.priceLevel",
           "places.types",
-          "places.regularOpeningHours.openNow",
+          "places.currentOpeningHours",
           "places.photos",
         ].join(","),
       },
       body: JSON.stringify({
         textQuery: `${query} in Kuwait`,
+        languageCode: "en",
         locationBias: {
           circle: {
             center: { latitude: KUWAIT_LAT, longitude: KUWAIT_LNG },
@@ -76,7 +64,6 @@ Deno.serve(async (req: Request) => {
           },
         },
         maxResultCount: Math.min(maxResults, 10),
-        languageCode: "en",
       }),
     });
 
@@ -92,21 +79,27 @@ Deno.serve(async (req: Request) => {
     const data = await res.json();
 
     // deno-lint-ignore no-explicit-any
-    const places = await Promise.all((data.places ?? []).map(async (p: any) => {
+    const places = (data.places ?? []).map((p: any) => {
+      // New Places API photo name format: "places/{placeId}/photos/{photoRef}"
+      // The last segment is the photo_reference compatible with the Maps photo URL.
       const photoName: string | null = p.photos?.[0]?.name ?? null;
-      const photoUrl = photoName ? await resolvePhotoUrl(photoName, apiKey) : null;
+      const photoRef = photoName ? photoName.split("/").pop() : null;
+      const photoUrl = photoRef
+        ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photoRef}&key=${apiKey}`
+        : null;
+
       return {
         id: p.id ?? "",
         name: p.displayName?.text ?? "",
         address: p.formattedAddress ?? "",
         rating: p.rating ?? null,
         reviewCount: p.userRatingCount ?? 0,
-        price: PRICE_MAP[p.priceLevel] ?? null,
+        price: PRICE_MAP[p.priceLevel as string] ?? null,
         types: (p.types ?? []).slice(0, 3),
-        openNow: p.regularOpeningHours?.openNow ?? null,
+        openNow: p.currentOpeningHours?.openNow ?? null,
         photoUrl,
       };
-    }));
+    });
 
     return new Response(
       JSON.stringify({ places }),
