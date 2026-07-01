@@ -522,15 +522,17 @@ export default function AIPlanPage() {
               )}
             </div>
 
-            {/* Chart-style vote cards */}
+            {/* Chart-style vote cards — sorted by votes (leaderboard order) */}
             <div className="space-y-1.5">
-              {placeCards.map((card, idx) => {
-                const count = poll?.vote_counts?.[String(idx)] ?? 0;
+              {placeCards
+                .map((card, idx) => ({ card, idx, count: poll?.vote_counts?.[String(idx)] ?? 0 }))
+                .sort((a, b) => b.count - a.count)
+                .map(({ card, idx, count }, rank0) => {
                 const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                 const isMyVote = myVoteIdx === idx;
                 const maxCount = Math.max(...placeCards.map((_, i) => poll?.vote_counts?.[String(i)] ?? 0), 0);
                 const isLeading = total > 0 && count === maxCount && count > 0;
-                const rank = placeCards.filter((_, i) => (poll?.vote_counts?.[String(i)] ?? 0) > count).length + 1;
+                const rank = rank0 + 1;
                 const emoji = cardEmoji(card.types);
                 return (
                   <button
