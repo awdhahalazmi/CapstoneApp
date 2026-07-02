@@ -594,6 +594,9 @@ class WhatsAppManager {
           } else {
             session.status = "disconnected";
             this.sessions.delete(userId);
+            // Delete auth files so the next startSession call generates a fresh QR
+            const sessionDir = path.join(this.sessionsDir, userId);
+            fs.rmSync(sessionDir, { recursive: true, force: true });
           }
         }
       });
