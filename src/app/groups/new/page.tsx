@@ -4,14 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
-import Toggle from "@/components/Toggle";
 import {
   ArrowLeftIcon,
   SearchIcon,
   CheckIcon,
   PlusIcon,
-  LockIcon,
-  GlobeIcon,
   CameraIcon,
 } from "@/components/icons";
 import { useSession, useProfile } from "@/lib/supabase/use-session";
@@ -34,7 +31,6 @@ export default function NewGroupPage() {
   const [inviteSent, setInviteSent] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Map<string, GroupMember>>(new Map());
-  const [isPublic, setIsPublic] = useState(true);
   const [interests, setInterests] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
 
@@ -123,7 +119,7 @@ export default function NewGroupPage() {
   async function handleCreate() {
     if (!name.trim() || interests.size === 0 || creating) return;
     setCreating(true);
-    const id = await createGroup({ name, isPublic, memberIds: [...selected.keys()], interests: [...interests] });
+    const id = await createGroup({ name, memberIds: [...selected.keys()], interests: [...interests] });
     if (id) router.replace(`/groups/${id}`);
     else setCreating(false);
   }
@@ -280,18 +276,6 @@ export default function NewGroupPage() {
                 );
               })}
             </div>
-          </div>
-
-          {/* Visibility */}
-          <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-secondary-container text-primary">
-              {isPublic ? <GlobeIcon className="h-5 w-5" /> : <LockIcon className="h-5 w-5" />}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold">Public Visibility</p>
-              <p className="text-[13px] text-on-surface-variant">Anyone can discover &amp; join</p>
-            </div>
-            <Toggle on={isPublic} onChange={() => setIsPublic((v) => !v)} label="Public" />
           </div>
 
           {/* Description */}

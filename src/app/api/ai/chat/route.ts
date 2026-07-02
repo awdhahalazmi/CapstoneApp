@@ -31,7 +31,7 @@ const getUserGroupsTool = (jwt: string) =>
       const { data: groups } = ids.length
         ? await sb
             .from("groups")
-            .select("id, name, emoji, is_public")
+            .select("id, name, emoji")
             .in("id", ids)
         : { data: [] };
 
@@ -51,8 +51,8 @@ const getUserGroupsTool = (jwt: string) =>
 
       return groups
         .map(
-          (g: { id: string; name: string; emoji: string; is_public: boolean }) =>
-            `${g.emoji} ${g.name} [id:${g.id}] (${g.is_public ? "public" : "private"}) — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`,
+          (g: { id: string; name: string; emoji: string }) =>
+            `${g.emoji} ${g.name} [id:${g.id}] — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`,
         )
         .join("\n");
     },

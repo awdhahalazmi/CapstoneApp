@@ -17,11 +17,11 @@ async function loadGroups(uid: string): Promise<Group[]> {
 
   // Groups I own OR belong to
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q = (supabase.from("groups") as any).select("id, name, emoji, is_public, owner_id, interests");
+  let q = (supabase.from("groups") as any).select("id, name, emoji, owner_id, interests");
   q = memberGroupIds.length
     ? q.or(`owner_id.eq.${uid},id.in.(${memberGroupIds.join(",")})`)
     : q.eq("owner_id", uid);
-  const { data: groupRows } = await q as { data: { id: string; name: string; emoji: string; is_public: boolean; owner_id: string; interests: string[] }[] | null };
+  const { data: groupRows } = await q as { data: { id: string; name: string; emoji: string; owner_id: string; interests: string[] }[] | null };
   const groups = groupRows ?? [];
   if (groups.length === 0) return [];
 
@@ -43,7 +43,6 @@ async function loadGroups(uid: string): Promise<Group[]> {
     id: g.id,
     name: g.name,
     emoji: g.emoji,
-    isPublic: g.is_public,
     ownerId: g.owner_id,
     members: byGroup[g.id] ?? [],
     interests: g.interests ?? [],
@@ -80,7 +79,6 @@ export function useGroups() {
 
   async function createGroup(input: {
     name: string;
-    isPublic: boolean;
     memberIds: string[];
     emoji?: string;
     interests?: string[];
@@ -89,7 +87,7 @@ export function useGroups() {
     const emoji = input.emoji ?? CREATED_EMOJIS[input.name.length % CREATED_EMOJIS.length];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: g, error } = await (supabase.from("groups") as any)
-      .insert({ owner_id: uid, name: input.name.trim(), emoji, is_public: input.isPublic, interests: input.interests ?? [] })
+      .insert({ owner_id: uid, name: input.name.trim(), emoji, interests: input.interests ?? [] })
       .select("id")
       .single();
     if (error || !g) return null;
@@ -103,12 +101,11 @@ export function useGroups() {
 
   async function updateGroup(
     id: string,
-    patch: { name?: string; emoji?: string; isPublic?: boolean; interests?: string[] },
+    patch: { name?: string; emoji?: string; interests?: string[] },
   ) {
     const upd: Record<string, unknown> = {};
     if (patch.name !== undefined) upd.name = patch.name;
     if (patch.emoji !== undefined) upd.emoji = patch.emoji;
-    if (patch.isPublic !== undefined) upd.is_public = patch.isPublic;
     if (patch.interests !== undefined) upd.interests = patch.interests;
     if (Object.keys(upd).length === 0) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

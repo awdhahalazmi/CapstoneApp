@@ -3,14 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import Toggle from "@/components/Toggle";
 import {
   ArrowLeftIcon,
   SearchIcon,
   CheckIcon,
   PlusIcon,
-  GlobeIcon,
-  LockIcon,
   TrashIcon,
   CameraIcon,
 } from "@/components/icons";
@@ -244,18 +241,6 @@ export default function EditGroupPage() {
             {activeInterests.size === 0 && (
               <p className="mt-2 text-[12px] text-amber-600">Pick at least one so AI can suggest places.</p>
             )}
-          </div>
-
-          {/* Visibility */}
-          <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-secondary-container text-primary">
-              {group.isPublic ? <GlobeIcon className="h-5 w-5" /> : <LockIcon className="h-5 w-5" />}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold">Public Visibility</p>
-              <p className="text-[13px] text-on-surface-variant">Anyone can discover &amp; join</p>
-            </div>
-            <Toggle on={group.isPublic} onChange={() => updateGroup(group.id, { isPublic: !group.isPublic })} label="Public" />
           </div>
 
           {/* Delete */}

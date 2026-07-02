@@ -63,7 +63,7 @@ function GroupCard({ group, waLinked }: { group: Group; waLinked: boolean }) {
 
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
             <p className="text-[13px] text-gray-400">
-              {group.isPublic ? "Public" : "Private"} · {group.members.length}{" "}
+              {group.members.length}{" "}
               {group.members.length === 1 ? "member" : "members"}
             </p>
             {waLinked && (
