@@ -268,6 +268,16 @@ export default function AIPlanPage() {
     const shownKey = `shown_places_${params.id}`;
     const shownIds = new Set<string>(JSON.parse(localStorage.getItem(shownKey) ?? "[]"));
 
+    // Fetch past event places so we never re-suggest somewhere the group already went
+    const { data: pastEvents } = await supabase
+      .from("events")
+      .select("place_name")
+      .eq("group_id", params.id)
+      .not("place_name", "is", null);
+    const pastPlaceNames = new Set<string>(
+      (pastEvents ?? []).map((e) => (e.place_name as string).toLowerCase())
+    );
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     // Fetch more per interest so we have enough after filtering out already-seen places
@@ -291,6 +301,8 @@ export default function AIPlanPage() {
       for (const p of r.value.places ?? []) {
         if (seenNames.has(p.name)) continue;
         seenNames.add(p.name);
+        // Never re-suggest a place the group has already visited
+        if (pastPlaceNames.has(p.name.toLowerCase())) continue;
         if (shownIds.has(p.id)) fallback.push(p);
         else fresh.push(p);
       }
