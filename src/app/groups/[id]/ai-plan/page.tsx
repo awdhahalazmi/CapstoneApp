@@ -117,6 +117,9 @@ export default function AIPlanPage() {
   const subRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const autoPickedRef = useRef(false);
   const timerStartedRef = useRef(false);
+  const voteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverVoteIdxRef = useRef<number | null>(null);
+  const latestVoteIdxRef = useRef<number | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
 
   // Load WA link + check for existing active plan poll
@@ -368,10 +371,11 @@ export default function AIPlanPage() {
     setPhase("voting");
   }
 
-  async function vote(idx: number) {
+  function vote(idx: number) {
     if (!poll || myVoteIdx === idx) return;
     const prevIdx = myVoteIdx;
-    // Optimistic update so the tap feels instant
+
+    // Optimistic update — instant UI response
     setPoll((p) => {
       if (!p) return p;
       const c = { ...(p.vote_counts ?? {}) };
@@ -380,15 +384,29 @@ export default function AIPlanPage() {
       return { ...p, vote_counts: c };
     });
     setMyVoteIdx(idx);
+    latestVoteIdxRef.current = idx;
     localStorage.setItem(`vote_${poll.id}`, String(idx));
-    // Atomic server-side increment — no race condition when two people vote simultaneously
-    const { data } = await supabase.rpc("cast_vote", {
-      p_poll_id: poll.id,
-      p_old_idx: prevIdx ?? -1,
-      p_new_idx: idx,
-    });
-    // Reconcile with the authoritative counts returned by the RPC
-    if (data) setPoll((p) => p ? { ...p, vote_counts: data as Record<string, number> } : p);
+
+    // Debounce the RPC so rapid tap-changes collapse into one server call.
+    // Use serverVoteIdxRef (last committed state) as p_old_idx so we never
+    // send a stale "decrement" from an intermediate intent that never reached
+    // the server.
+    if (voteDebounceRef.current) clearTimeout(voteDebounceRef.current);
+    const pollId = poll.id;
+    voteDebounceRef.current = setTimeout(async () => {
+      const oldIdx = serverVoteIdxRef.current;
+      const newIdx = latestVoteIdxRef.current;
+      if (newIdx === null) return;
+      const { data } = await supabase.rpc("cast_vote", {
+        p_poll_id: pollId,
+        p_old_idx: oldIdx ?? -1,
+        p_new_idx: newIdx,
+      });
+      if (data) {
+        serverVoteIdxRef.current = newIdx;
+        setPoll((p) => p ? { ...p, vote_counts: data as Record<string, number> } : p);
+      }
+    }, 150);
   }
 
   function pickWinner() {
@@ -594,7 +612,7 @@ export default function AIPlanPage() {
                           {/* Bar */}
                           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-on-surface/8">
                             <div
-                              className={`h-full rounded-full transition-all duration-700 ease-out
+                              className={`h-full rounded-full transition-all duration-150 ease-out
                                 ${isLeading ? "bg-gradient-to-r from-primary to-violet-500" : isTied ? "bg-amber-400" : "bg-primary/30"}`}
                               style={{ width: `${pct}%` }}
                             />
