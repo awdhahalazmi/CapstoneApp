@@ -270,6 +270,7 @@ export default function GroupHubPage() {
   const [showPollSheet, setShowPollSheet] = useState(false);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [places, setPlaces] = useState<PlaceRow[]>([]);
+  const [confirmDeleteEventId, setConfirmDeleteEventId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId || !params.id) return;
@@ -337,6 +338,12 @@ export default function GroupHubPage() {
         </div>
       </div>
     );
+  }
+
+  async function deleteEvent(id: string) {
+    await supabase.from("events").delete().eq("id", id);
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setConfirmDeleteEventId(null);
   }
 
   const [from, to] = gradientFor(group.id);
@@ -606,29 +613,55 @@ export default function GroupHubPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {events.map((e) => (
-                <div key={e.id} className={`rounded-2xl px-4 py-4 ${e.source_poll_id ? "bg-gradient-to-br from-primary/6 to-violet-500/5 ring-1 ring-primary/15" : "bg-surface-container"}`}>
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[15px] font-semibold text-on-surface">{e.title}</p>
+              {events.map((e) => {
+                const confirming = confirmDeleteEventId === e.id;
+                return (
+                  <div key={e.id} className={`rounded-2xl px-4 py-4 ${e.source_poll_id ? "bg-gradient-to-br from-primary/6 to-violet-500/5 ring-1 ring-primary/15" : "bg-surface-container"}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-on-surface">{e.title}</p>
+                      </div>
+                      {e.source_poll_id && !confirming && (
+                        <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                          ✨ AI Pick
+                        </span>
+                      )}
+                      {confirming ? (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            onClick={() => deleteEvent(e.id)}
+                            className="rounded-full bg-red-500 px-3 py-1 text-[11px] font-semibold text-white"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteEventId(null)}
+                            className="rounded-full bg-on-surface/8 px-3 py-1 text-[11px] font-medium text-on-surface-variant"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteEventId(e.id)}
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-on-surface-variant/40 hover:bg-on-surface/8 hover:text-on-surface-variant"
+                        >
+                          <XIcon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
-                    {e.source_poll_id && (
-                      <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
-                        ✨ AI Pick
-                      </span>
+                    {e.place_name && <p className="mt-1 text-[12px] text-on-surface-variant">📍 {e.place_name}</p>}
+                    {(e.event_date || e.event_time) ? (
+                      <p className="mt-0.5 text-[12px] text-on-surface-variant">
+                        🗓️ {[e.event_date, e.event_time].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-[11px] text-on-surface-variant/60">🗓️ Date TBD</p>
                     )}
+                    {e.sent_at && <p className="mt-1 text-[11px] font-medium text-[#128c7e]">✓ Sent to WhatsApp</p>}
                   </div>
-                  {e.place_name && <p className="mt-1 text-[12px] text-on-surface-variant">📍 {e.place_name}</p>}
-                  {(e.event_date || e.event_time) ? (
-                    <p className="mt-0.5 text-[12px] text-on-surface-variant">
-                      🗓️ {[e.event_date, e.event_time].filter(Boolean).join(" · ")}
-                    </p>
-                  ) : (
-                    <p className="mt-0.5 text-[11px] text-on-surface-variant/60">🗓️ Date TBD</p>
-                  )}
-                  {e.sent_at && <p className="mt-1 text-[11px] font-medium text-[#128c7e]">✓ Sent to WhatsApp</p>}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
