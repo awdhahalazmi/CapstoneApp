@@ -7,8 +7,6 @@ import Avatar from "@/components/Avatar";
 import {
   ArrowLeftIcon,
   PencilIcon,
-  GlobeIcon,
-  LockIcon,
   PlusIcon,
   XIcon,
 } from "@/components/icons";
@@ -55,6 +53,7 @@ type EventRow = {
   event_date: string | null;
   event_time: string | null;
   sent_at: string | null;
+  source_poll_id: string | null;
 };
 
 type PlaceRow = {
@@ -281,8 +280,8 @@ export default function GroupHubPage() {
         fetch(`/api/whatsapp/status?userId=${userId}`).then(r => r.json()).catch(() => ({})),
         supabase.from("whatsapp_polls").select("*")
           .eq("group_id", params.id).order("created_at", { ascending: false }).limit(3),
-        supabase.from("events").select("id, title, place_name, event_date, event_time, sent_at")
-          .eq("group_id", params.id).order("event_date", { ascending: true }).limit(5),
+        supabase.from("events").select("id, title, place_name, event_date, event_time, sent_at, source_poll_id")
+          .eq("group_id", params.id).order("created_at", { ascending: false }).limit(5),
         supabase.from("poll_place_results").select("id, place_name, category")
           .eq("group_id", params.id).is("poll_id", null).order("category").order("created_at", { ascending: false }),
       ]);
@@ -597,25 +596,42 @@ export default function GroupHubPage() {
         )}
 
         {/* ── Events section ────────────────────────────── */}
-        {events.length > 0 && (
-          <section>
-            <h2 className="mb-3 text-[16px] font-medium text-on-surface">Upcoming Events</h2>
+        <section>
+          <h2 className="mb-3 text-[16px] font-medium text-on-surface">Upcoming Events</h2>
+          {events.length === 0 ? (
+            <div className="rounded-2xl border border-outline-variant/50 py-8 text-center">
+              <p className="text-[32px]">🎉</p>
+              <p className="mt-2 text-[14px] font-medium text-on-surface">No events yet</p>
+              <p className="mt-0.5 text-[12px] text-on-surface-variant">Use AI Plan to pick a place and create an event</p>
+            </div>
+          ) : (
             <div className="space-y-3">
               {events.map((e) => (
-                <div key={e.id} className="rounded-2xl bg-surface-container px-4 py-4">
-                  <p className="text-[15px] font-medium text-on-surface">{e.title}</p>
-                  {e.place_name && <p className="mt-0.5 text-[12px] text-on-surface-variant">📍 {e.place_name}</p>}
-                  {(e.event_date || e.event_time) && (
+                <div key={e.id} className={`rounded-2xl px-4 py-4 ${e.source_poll_id ? "bg-gradient-to-br from-primary/6 to-violet-500/5 ring-1 ring-primary/15" : "bg-surface-container"}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] font-semibold text-on-surface">{e.title}</p>
+                    </div>
+                    {e.source_poll_id && (
+                      <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                        ✨ AI Pick
+                      </span>
+                    )}
+                  </div>
+                  {e.place_name && <p className="mt-1 text-[12px] text-on-surface-variant">📍 {e.place_name}</p>}
+                  {(e.event_date || e.event_time) ? (
                     <p className="mt-0.5 text-[12px] text-on-surface-variant">
                       🗓️ {[e.event_date, e.event_time].filter(Boolean).join(" · ")}
                     </p>
+                  ) : (
+                    <p className="mt-0.5 text-[11px] text-on-surface-variant/60">🗓️ Date TBD</p>
                   )}
                   {e.sent_at && <p className="mt-1 text-[11px] font-medium text-[#128c7e]">✓ Sent to WhatsApp</p>}
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* ── Members section ───────────────────────────── */}
         <section>
