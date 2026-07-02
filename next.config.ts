@@ -9,12 +9,16 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const waServer = process.env.WHATSAPP_SERVER_URL;
     if (!waServer) return [];
-    return [
-      {
-        source: "/api/whatsapp/:path*",
-        destination: `${waServer}/api/whatsapp/:path*`,
-      },
-    ];
+    // beforeFiles runs BEFORE filesystem routes — prevents Vercel from running
+    // local whatsapp route.ts files and instead proxies all /api/whatsapp/* to Railway
+    return {
+      beforeFiles: [
+        {
+          source: "/api/whatsapp/:path*",
+          destination: `${waServer}/api/whatsapp/:path*`,
+        },
+      ],
+    };
   },
 };
 
