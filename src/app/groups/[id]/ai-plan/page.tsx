@@ -687,6 +687,19 @@ export default function AIPlanPage() {
                   const pick = tiedCards[Math.floor(Math.random() * tiedCards.length)];
                   setWinnerIdx(pick.idx);
                   setEventForm({ title: `Group Outing — ${pick.card.name}`, date: "", time: "", notes: "" });
+                  if (waJid) {
+                    fetch("/api/whatsapp/send-event", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        userId,
+                        waJid,
+                        title: `Group Outing — ${pick.card.name}`,
+                        placeName: pick.card.name,
+                        pollSummary: "AI picked from a draw 🤝🎲",
+                      }),
+                    }).catch(() => {});
+                  }
                   setPhase("winner");
                 }}
                 className="mt-6 flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-primary to-violet-500 text-[16px] font-semibold text-white shadow-[0_10px_28px_rgba(124,58,237,0.3)] transition active:scale-[0.97]"
