@@ -238,7 +238,7 @@ export default function WAGroupPage() {
       .order("created_at", { ascending: false })
       .limit(1)
       .then(({ data }) => {
-        if (data) setPolls(data as WAPoll[]);
+        if (data) setPolls(data as unknown as WAPoll[]);
         setLoading(false);
       });
   };

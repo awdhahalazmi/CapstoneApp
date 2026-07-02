@@ -397,7 +397,8 @@ export default function AIPlanPage() {
       const oldIdx = serverVoteIdxRef.current;
       const newIdx = latestVoteIdxRef.current;
       if (newIdx === null) return;
-      const { data } = await supabase.rpc("cast_vote", {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any).rpc("cast_vote", {
         p_poll_id: pollId,
         p_old_idx: oldIdx ?? -1,
         p_new_idx: newIdx,
