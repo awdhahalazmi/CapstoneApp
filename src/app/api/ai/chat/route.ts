@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { tool } from "@langchain/core/tools";
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
+import { waManager } from "@/lib/whatsapp/manager";
+
+export const runtime = "nodejs";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -28,7 +31,7 @@ const getUserGroupsTool = (jwt: string) =>
       const { data: groups } = ids.length
         ? await sb
             .from("groups")
-            .select("id, name, emoji, is_public")
+            .select("id, name, emoji")
             .in("id", ids)
         : { data: [] };
 
@@ -48,14 +51,14 @@ const getUserGroupsTool = (jwt: string) =>
 
       return groups
         .map(
-          (g: { id: string; name: string; emoji: string; is_public: boolean }) =>
-            `${g.emoji} ${g.name} (${g.is_public ? "public" : "private"}) — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`,
+          (g: { id: string; name: string; emoji: string }) =>
+            `${g.emoji} ${g.name} [id:${g.id}] — members: ${(byGroup[g.id] ?? []).join(", ") || "none yet"}`,
         )
         .join("\n");
     },
     {
       name: "get_user_groups",
-      description: "Returns the signed-in user's groups and their members.",
+      description: "Returns the signed-in user's groups, their members, and their IDs. Always call this before create_event to find the correct group ID.",
       schema: z.object({}),
     },
   );
@@ -161,13 +164,94 @@ const getGroupActivityTool = (jwt: string) =>
     },
   );
 
+const createEventTool = (jwt: string) =>
+  tool(
+    async ({ groupId, title, description, placeName, eventDate, eventTime }: {
+      groupId: string;
+      title: string;
+      description?: string;
+      placeName?: string;
+      eventDate?: string;
+      eventTime?: string;
+    }) => {
+      const sb = makeSupabase(jwt);
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return "Error: Not authenticated.";
+
+      const { data, error } = await sb.from("events").insert({
+        group_id: groupId,
+        title,
+        description: description || null,
+        place_name: placeName || null,
+        event_date: eventDate || null,
+        event_time: eventTime || null,
+        created_by: user.id,
+      }).select().single();
+
+      if (error) return `Failed to create event: ${error.message}`;
+
+      const ev = data as { title: string; event_date?: string; event_time?: string; place_name?: string; description?: string };
+      const confirm = `Event created! 🎉 "${ev.title}"${ev.place_name ? ` at ${ev.place_name}` : ""}${ev.event_date ? ` on ${ev.event_date}` : ""} has been added to the group.`;
+
+      // Build a human-readable event announcement
+      const lines = [`📅 New Event: ${title}`];
+      if (ev.place_name) lines.push(`📍 ${ev.place_name}`);
+      if (ev.event_date) lines.push(`🗓️ ${ev.event_date}${ev.event_time ? ` at ${ev.event_time}` : ""}`);
+      if (ev.description) lines.push(`📝 ${ev.description}`);
+      lines.push(`✨ Added via Beyond Kw AI`);
+      const announcement = lines.join("\n");
+
+      // Post to in-app group chat so all members see it
+      try {
+        await sb.from("group_messages").insert({
+          group_id: groupId,
+          sender_id: user.id,
+          content: announcement,
+        });
+      } catch { /* ignore */ }
+
+      // Also send to WhatsApp if ANY member has a connected WA session for this group
+      try {
+        const { data: links } = await sb
+          .from("whatsapp_group_links")
+          .select("wa_jid, user_id")
+          .eq("group_id", groupId);
+
+        for (const link of links ?? []) {
+          if (waManager.getStatus(link.user_id) === "connected") {
+            await waManager.sendText(link.user_id, link.wa_jid, announcement);
+            break;
+          }
+        }
+      } catch { /* WA send failure should not block the response */ }
+
+      return confirm;
+    },
+    {
+      name: "create_event",
+      description:
+        "Creates a group event in Beyond Kw. " +
+        "IMPORTANT: Always call get_user_groups first to get the correct group ID. " +
+        "If the user hasn't specified a group, ask them which group this event is for before calling this tool. " +
+        "eventDate must be YYYY-MM-DD, eventTime must be HH:MM (24h).",
+      schema: z.object({
+        groupId: z.string().describe("UUID of the group from get_user_groups [id:...] field"),
+        title: z.string().describe("Event title"),
+        description: z.string().optional().describe("Optional description"),
+        placeName: z.string().optional().describe("Venue or place name"),
+        eventDate: z.string().optional().describe("Date in YYYY-MM-DD format"),
+        eventTime: z.string().optional().describe("Time in HH:MM 24h format"),
+      }),
+    },
+  );
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENROUTER_API_KEY is not set in .env.local" },
+      { error: "ANTHROPIC_API_KEY is not set in .env.local" },
       { status: 500 },
     );
   }
@@ -184,31 +268,25 @@ export async function POST(req: NextRequest) {
     getUserFriendsTool(jwt),
     getPlacesTool(jwt),
     getGroupActivityTool(jwt),
+    createEventTool(jwt),
   ];
 
-  const model = new ChatOpenAI({
-    model: "openai/gpt-4o-mini",
+  const model = new ChatAnthropic({
+    model: "claude-haiku-4-5-20251001",
     apiKey,
-    configuration: {
-      baseURL: "https://openrouter.ai/api/v1",
-      defaultHeaders: {
-        "HTTP-Referer": "https://beyond-kw.app",
-        "X-Title": "Beyond Kw",
-      },
-    },
     maxTokens: 1200,
   }).bindTools(tools);
 
   // Build system prompt
   let system =
     "You are the Beyond Kw assistant — a friendly local guide for KUWAIT ONLY. " +
-    "You help young adults in Kuwait plan outings and discover places. " +
+    "Be concise: reply in 3–6 lines max. No long paragraphs. " +
     "RULES: (1) Only recommend real places in Kuwait. " +
-    "(2) Always name specific places with their area. " +
-    "(3) Give 3–5 concrete options with a one-line reason and rough KWD budget. " +
-    "(4) For outing requests give a short timeline: time → place → activity. " +
-    "(5) Use your tools to fetch real data about the user's groups, friends, and places — don't make things up. " +
-    "(6) For group planning, use get_user_groups and get_user_friends to personalise suggestions.";
+    "(2) Give 2–3 options with a one-line reason and rough KWD budget. " +
+    "(3) Use your tools to fetch real data — don't make things up. " +
+    "(4) EVENT CREATION: ask which group if not specified, call get_user_groups for the ID, then create_event. " +
+    "Today is " + new Date().toISOString().split("T")[0] + ". Convert day names to YYYY-MM-DD. " +
+    "After creating, confirm briefly.";
 
   if (group) {
     const memberNames = (group.members ?? []).map((m: { name?: string }) => m.name).join(", ");
@@ -223,19 +301,21 @@ export async function POST(req: NextRequest) {
     m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content),
   );
 
-  // Agentic loop — handle tool calls
+  // Agentic loop — handle tool calls (parallel execution, max 3 rounds)
   let response = await model.invoke([new SystemMessage(system), ...history]);
 
   let iterations = 0;
-  while (response.tool_calls && response.tool_calls.length > 0 && iterations < 5) {
+  while (response.tool_calls && response.tool_calls.length > 0 && iterations < 3) {
     iterations++;
-    const toolMessages: ToolMessage[] = [];
-    for (const tc of response.tool_calls) {
-      const t = tools.find((t) => t.name === tc.name);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = t ? await (t.invoke as (a: any) => Promise<unknown>)(tc.args) : "Tool not found.";
-      toolMessages.push(new ToolMessage({ content: String(result), tool_call_id: tc.id! }));
-    }
+    // Run all tool calls in parallel
+    const toolMessages: ToolMessage[] = await Promise.all(
+      response.tool_calls.map(async (tc) => {
+        const t = tools.find((t) => t.name === tc.name);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = t ? await (t.invoke as (a: any) => Promise<unknown>)(tc.args) : "Tool not found.";
+        return new ToolMessage({ content: String(result), tool_call_id: tc.id! });
+      })
+    );
     response = await model.invoke([
       new SystemMessage(system),
       ...history,

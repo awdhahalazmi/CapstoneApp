@@ -57,9 +57,9 @@ export type Group = {
   id: string;
   name: string;
   emoji: string;
-  isPublic: boolean;
   ownerId: string;
   members: GroupMember[];
+  interests: string[];
 };
 
 export type ChatMessage = {

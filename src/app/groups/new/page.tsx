@@ -4,14 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
-import Toggle from "@/components/Toggle";
 import {
   ArrowLeftIcon,
   SearchIcon,
   CheckIcon,
   PlusIcon,
-  LockIcon,
-  GlobeIcon,
   CameraIcon,
 } from "@/components/icons";
 import { useSession, useProfile } from "@/lib/supabase/use-session";
@@ -34,8 +31,30 @@ export default function NewGroupPage() {
   const [inviteSent, setInviteSent] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Map<string, GroupMember>>(new Map());
-  const [isPublic, setIsPublic] = useState(true);
+  const [interests, setInterests] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
+
+  const INTEREST_OPTIONS = [
+    { key: "Cafés", emoji: "☕" },
+    { key: "Restaurants", emoji: "🍽️" },
+    { key: "Cinema", emoji: "🎬" },
+    { key: "Outdoors", emoji: "🏖️" },
+    { key: "Gaming", emoji: "🎮" },
+    { key: "Shopping", emoji: "🛍️" },
+    { key: "Nightlife", emoji: "🎵" },
+    { key: "Sports", emoji: "⚽" },
+    { key: "Culture", emoji: "🎨" },
+    { key: "Fast Food", emoji: "🍕" },
+  ];
+
+  function toggleInterest(key: string) {
+    setInterests((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const myAv = avatarFor({ id: profile?.id, name: profile?.name, username: profile?.username });
@@ -98,9 +117,9 @@ export default function NewGroupPage() {
   }
 
   async function handleCreate() {
-    if (!name.trim() || creating) return;
+    if (!name.trim() || interests.size === 0 || creating) return;
     setCreating(true);
-    const id = await createGroup({ name, isPublic, memberIds: [...selected.keys()] });
+    const id = await createGroup({ name, memberIds: [...selected.keys()], interests: [...interests] });
     if (id) router.replace(`/groups/${id}`);
     else setCreating(false);
   }
@@ -227,16 +246,36 @@ export default function NewGroupPage() {
             )}
           </div>
 
-          {/* Visibility */}
-          <div className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-soft">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-secondary-container text-primary">
-              {isPublic ? <GlobeIcon className="h-5 w-5" /> : <LockIcon className="h-5 w-5" />}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold">Public Visibility</p>
-              <p className="text-[13px] text-on-surface-variant">Anyone can discover &amp; join</p>
+          {/* Interests */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-bold">Group Interests</p>
+              {interests.size === 0 && (
+                <span className="text-[12px] text-red-500 font-medium">Pick at least one</span>
+              )}
             </div>
-            <Toggle on={isPublic} onChange={() => setIsPublic((v) => !v)} label="Public" />
+            <p className="mb-3 text-[13px] text-on-surface-variant">
+              The AI uses these to suggest the perfect places for your outings.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {INTEREST_OPTIONS.map(({ key, emoji }) => {
+                const active = interests.has(key);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleInterest(key)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-all active:scale-95 ${
+                      active
+                        ? "bg-primary text-on-primary shadow-sm"
+                        : "bg-surface-container text-on-surface-variant"
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    <span>{key}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Description */}
@@ -257,7 +296,7 @@ export default function NewGroupPage() {
       <div className="sticky bottom-0 border-t border-outline-variant/20 bg-surface/90 px-4 py-4 backdrop-blur-md">
         <button
           onClick={handleCreate}
-          disabled={!name.trim() || creating}
+          disabled={!name.trim() || interests.size === 0 || creating}
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-primary to-primary-container text-base font-semibold text-on-primary shadow-[0_10px_25px_rgba(124,58,237,0.35)] transition disabled:opacity-50 active:scale-[0.98]"
         >
           {creating ? "Creating…" : (

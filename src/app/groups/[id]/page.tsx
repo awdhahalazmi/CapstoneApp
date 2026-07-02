@@ -7,8 +7,6 @@ import Avatar from "@/components/Avatar";
 import {
   ArrowLeftIcon,
   PencilIcon,
-  GlobeIcon,
-  LockIcon,
   PlusIcon,
   XIcon,
 } from "@/components/icons";
@@ -17,7 +15,6 @@ import { useSession, useProfile } from "@/lib/supabase/use-session";
 import { avatarFor } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase/client";
 
-// Deterministic gradient per group id
 const GRADIENTS: [string, string][] = [
   ["#7c3aed", "#4f46e5"],
   ["#059669", "#0891b2"],
@@ -32,6 +29,14 @@ function gradientFor(id: string): [string, string] {
   return GRADIENTS[h % GRADIENTS.length];
 }
 
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
+
 type WAPoll = {
   id: string;
   question: string;
@@ -41,7 +46,84 @@ type WAPoll = {
   wa_message_id: string | null;
 };
 
-// ── M3 Linear Progress ─────────────────────────────────────────────────────────
+type EventRow = {
+  id: string;
+  title: string;
+  place_name: string | null;
+  event_date: string | null;
+  event_time: string | null;
+  sent_at: string | null;
+  source_poll_id: string | null;
+};
+
+type PlaceRow = {
+  id: string;
+  place_name: string;
+  category: string;
+};
+
+const CAT_EMOJI: Record<string, string> = {
+  Café: "☕", Restaurant: "🍽️", Dessert: "🍰", Breakfast: "🥐",
+  Dinner: "🌙", Beach: "🏖️", Activity: "🎯", Shopping: "🛍️", Other: "✨",
+};
+const catEmoji = (cat: string) => CAT_EMOJI[cat] ?? "📍";
+
+const CAT_GRADIENT: Record<string, string> = {
+  Café:       "linear-gradient(135deg,#92400e,#78350f)",
+  Restaurant: "linear-gradient(135deg,#c2410c,#9a3412)",
+  Dessert:    "linear-gradient(135deg,#db2777,#9d174d)",
+  Breakfast:  "linear-gradient(135deg,#d97706,#b45309)",
+  Dinner:     "linear-gradient(135deg,#3730a3,#1e1b4b)",
+  Beach:      "linear-gradient(135deg,#0891b2,#1d4ed8)",
+  Activity:   "linear-gradient(135deg,#059669,#065f46)",
+  Shopping:   "linear-gradient(135deg,#7c3aed,#4f46e5)",
+  Other:      "linear-gradient(135deg,#475569,#1e293b)",
+};
+const catGradient = (cat: string) => CAT_GRADIENT[cat] ?? "linear-gradient(135deg,#374151,#111827)";
+
+function PlaceCard({ place }: { place: PlaceRow }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!key) return;
+    fetch(`/api/places/photo?name=${encodeURIComponent(place.place_name)}`)
+      .then(r => r.json())
+      .then(d => { if (d.url) setPhotoUrl(d.url); })
+      .catch(() => {});
+  }, [place.place_name]);
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl aspect-[3/4]"
+      style={{ background: photoUrl ? undefined : catGradient(place.category) }}
+    >
+      {photoUrl && (
+        <img
+          src={photoUrl}
+          alt={place.place_name}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      {/* Emoji centred (shown when no photo) */}
+      {!photoUrl && (
+        <div className="absolute inset-0 flex items-center justify-center text-5xl opacity-40">
+          {catEmoji(place.category)}
+        </div>
+      )}
+      {/* Bottom overlay */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 py-3 pt-8">
+        <p className="text-[12px] font-semibold text-white leading-snug line-clamp-2">
+          {place.place_name}
+        </p>
+        <p className="mt-0.5 text-[10px] text-white/60">
+          {catEmoji(place.category)} {place.category}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function LinearProgress({ value }: { value: number }) {
   return (
     <div className="h-[3px] w-full overflow-hidden rounded-full bg-primary/15">
@@ -53,7 +135,6 @@ function LinearProgress({ value }: { value: number }) {
   );
 }
 
-// ── Quick Poll Sheet (M3 Modal Bottom Sheet) ───────────────────────────────────
 function QuickPollSheet({
   groupId,
   userId,
@@ -63,7 +144,7 @@ function QuickPollSheet({
 }: {
   groupId: string;
   userId: string;
-  waJid: string;
+  waJid: string | null;
   onCreated: (p: WAPoll) => void;
   onClose: () => void;
 }) {
@@ -77,22 +158,26 @@ function QuickPollSheet({
     if (!question.trim() || clean.length < 2 || !profile) return;
     setSending(true);
     try {
-      const res = await fetch("/api/whatsapp/poll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId, waJid, groupId,
-          question: question.trim(),
-          options: clean.map((o) => o.trim()),
-        }),
-      });
-      const result = await res.json();
+      let messageId: string | null = null;
+      if (waJid) {
+        const res = await fetch("/api/whatsapp/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId, waJid, groupId,
+            question: question.trim(),
+            options: clean.map((o) => o.trim()),
+          }),
+        });
+        const result = await res.json();
+        messageId = result.messageId ?? null;
+      }
       const { data } = await supabase
         .from("whatsapp_polls")
         .insert({
           group_id: groupId,
-          wa_jid: waJid,
-          wa_message_id: result.messageId ?? null,
+          wa_jid: waJid ?? "",
+          wa_message_id: messageId,
           question: question.trim(),
           options: clean.map((o) => o.trim()),
           vote_counts: {},
@@ -171,7 +256,6 @@ function QuickPollSheet({
   );
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function GroupHubPage() {
   const params = useParams<{ id: string }>();
   const { groups, loading } = useGroups();
@@ -184,52 +268,94 @@ export default function GroupHubPage() {
   const [waJid, setWaJid] = useState<string | null>(null);
   const [waConnected, setWaConnected] = useState(false);
   const [showPollSheet, setShowPollSheet] = useState(false);
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [places, setPlaces] = useState<PlaceRow[]>([]);
+  const [confirmDeleteEventId, setConfirmDeleteEventId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId || !params.id) return;
     async function load() {
-      const [{ data: link }, statusRes, { data: pollData }] = await Promise.all([
+      const [{ data: link }, statusRes, { data: pollData }, { data: eventData }, { data: placeData }] = await Promise.all([
         supabase.from("whatsapp_group_links").select("wa_jid")
           .eq("group_id", params.id).eq("user_id", userId).maybeSingle(),
         fetch(`/api/whatsapp/status?userId=${userId}`).then(r => r.json()).catch(() => ({})),
         supabase.from("whatsapp_polls").select("*")
           .eq("group_id", params.id).order("created_at", { ascending: false }).limit(3),
+        supabase.from("events").select("id, title, place_name, event_date, event_time, sent_at, source_poll_id")
+          .eq("group_id", params.id).order("created_at", { ascending: false }).limit(5),
+        supabase.from("poll_place_results").select("id, place_name, category")
+          .eq("group_id", params.id).is("poll_id", null).order("category").order("created_at", { ascending: false }),
       ]);
       setWaJid(link?.wa_jid ?? null);
       setWaConnected(statusRes?.status === "connected");
       setPolls((pollData ?? []) as WAPoll[]);
+      setEvents((eventData ?? []) as EventRow[]);
+      setPlaces((placeData ?? []) as PlaceRow[]);
     }
     load();
   }, [userId, params.id]);
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+      <div className="min-h-[100dvh] bg-surface">
+        {/* Skeleton header */}
+        <div className="sticky top-0 z-20 grid grid-cols-[3rem_1fr_3rem] items-center bg-surface/95 px-1 py-1">
+          <div className="h-12 w-12" />
+          <div className="mx-auto h-4 w-32 animate-pulse rounded bg-on-surface/10" />
+          <div className="h-12 w-12" />
+        </div>
+        {/* Skeleton hero */}
+        <div className="h-44 animate-pulse bg-on-surface/10" />
+        {/* Skeleton actions */}
+        <div className="grid grid-cols-3 gap-3 px-4 pt-5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-2xl bg-on-surface/8" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!group) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
-        <p className="text-on-surface-variant">This group isn&apos;t available.</p>
-        <Link href="/groups" className="btn-primary mt-4 h-11 px-5">Back to groups</Link>
+      <div className="flex min-h-[100dvh] flex-col bg-surface">
+        <header className="sticky top-0 z-20 grid grid-cols-[3rem_1fr_3rem] items-center bg-surface/95 px-1 py-1 backdrop-blur-md">
+          <Link href="/groups" className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
+            <ArrowLeftIcon />
+          </Link>
+          <h1 className="truncate text-center text-[18px] font-medium text-on-surface">Group</h1>
+          <div />
+        </header>
+        <div className="flex flex-1 flex-col items-center justify-center px-5 text-center">
+          <div className="mb-4 grid h-20 w-20 place-items-center rounded-full bg-surface-container text-4xl">
+            🔍
+          </div>
+          <p className="text-[18px] font-medium text-on-surface">Group not found</p>
+          <p className="mt-1.5 text-[14px] text-on-surface-variant">This group isn't available.</p>
+          <Link href="/groups" className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-6 py-2.5 text-[14px] font-medium text-on-primary">
+            Back to groups
+          </Link>
+        </div>
       </div>
     );
   }
 
+  async function deleteEvent(id: string) {
+    await supabase.from("events").delete().eq("id", id);
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setConfirmDeleteEventId(null);
+  }
+
   const [from, to] = gradientFor(group.id);
-  const canPoll = waConnected && !!waJid;
+  const canPoll = (waConnected && !!waJid) || !waJid;
 
   return (
     <div className="min-h-[100dvh] bg-surface pb-28">
-      {/* M3 Top App Bar */}
+      {/* Top App Bar */}
       <header className="sticky top-0 z-20 grid grid-cols-[3rem_1fr_3rem] items-center bg-surface/95 px-1 py-1 backdrop-blur-md">
         <Link href="/groups" className="grid h-12 w-12 place-items-center rounded-full text-on-surface hover:bg-on-surface/8">
           <ArrowLeftIcon />
         </Link>
-        {/* M3 Title Large */}
         <h1 className="truncate text-center text-[18px] font-medium text-on-surface">{group.name}</h1>
         <Link href={`/groups/${group.id}/edit`} className="grid h-12 w-12 place-items-center rounded-full text-on-surface-variant hover:bg-on-surface/8">
           <PencilIcon className="h-5 w-5" />
@@ -242,24 +368,75 @@ export default function GroupHubPage() {
         style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
       >
         <div className="text-7xl drop-shadow-lg">{group.emoji}</div>
-        <div className="ml-4 pb-1">
-          {/* M3 Headline Medium */}
+        <div className="ml-4 pb-1 flex-1 min-w-0">
           <h2 className="text-[28px] font-normal leading-tight text-white drop-shadow">
             {group.name}
           </h2>
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[12px] font-medium text-white backdrop-blur-sm">
-            {group.isPublic ? <GlobeIcon className="h-3 w-3" /> : <LockIcon className="h-3 w-3" />}
-            {group.isPublic ? "Public" : "Private"}
-          </span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[12px] font-medium text-white backdrop-blur-sm">
+              👥 {group.members.length} {group.members.length === 1 ? "member" : "members"}
+            </span>
+            {waJid && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#25d366]/80 px-2.5 py-0.5 text-[12px] font-medium text-white backdrop-blur-sm">
+                <WhatsAppIcon className="h-3 w-3" />
+                WhatsApp
+              </span>
+            )}
+          </div>
+          {/* Interests */}
+          {group.interests.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {group.interests.map((interest) => (
+                <span key={interest} className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm">
+                  {interest}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="space-y-6 px-4 pt-6">
+      <div className="space-y-6 px-4 pt-5">
 
-        {/* ── Polls section ────────────────────────────── */}
+        {/* ── Plan Outing CTA ─────────────────────────────── */}
+        <section>
+          <Link
+            href={`/groups/${group.id}/ai-plan`}
+            className="flex items-center gap-4 rounded-3xl bg-gradient-to-r from-primary to-violet-500 px-5 py-4 shadow-[0_8px_24px_rgba(124,58,237,0.3)] transition active:scale-[0.98]"
+          >
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/15 text-2xl">
+              ✨
+            </div>
+            <div className="flex-1">
+              <p className="text-[16px] font-semibold text-white">Plan Outing</p>
+              <p className="text-[12px] text-white/70">AI picks the best spots for your group</p>
+            </div>
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-white/60">
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+            </svg>
+          </Link>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Link
+              href={`/groups/${group.id}/plan`}
+              className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container px-3 py-4 text-center transition active:scale-[0.97] active:bg-surface-high"
+            >
+              <div className="grid h-11 w-11 place-items-center rounded-full bg-primary/10 text-2xl">📊</div>
+              <span className="text-[13px] font-semibold text-on-surface">Vote History</span>
+            </Link>
+            <Link
+              href={`/groups/${group.id}/edit`}
+              className="flex flex-col items-center gap-2 rounded-2xl bg-surface-container px-3 py-4 text-center transition active:scale-[0.97] active:bg-surface-high"
+            >
+              <div className="grid h-11 w-11 place-items-center rounded-full bg-on-surface/8 text-2xl">👥</div>
+              <span className="text-[13px] font-semibold text-on-surface">Members</span>
+            </Link>
+          </div>
+        </section>
+
+        {/* ── Recent Polls ────────────────────────────── */}
         <section>
           <div className="mb-3 flex items-center justify-between">
-            {/* M3 Title Medium */}
             <h2 className="text-[16px] font-medium text-on-surface">Polls</h2>
             <Link href={`/groups/${group.id}/plan`}
               className="rounded-full px-3 py-1 text-[13px] font-medium text-primary hover:bg-primary/8">
@@ -277,7 +454,9 @@ export default function GroupHubPage() {
               </div>
               <div>
                 <p className="text-[14px] font-medium text-primary">Create a poll</p>
-                <p className="text-[12px] text-on-surface-variant">Sends to WhatsApp instantly</p>
+                <p className="text-[12px] text-on-surface-variant">
+                  {waJid ? "Sends to WhatsApp instantly" : "Members vote in the app"}
+                </p>
               </div>
             </button>
           ) : (
@@ -291,6 +470,7 @@ export default function GroupHubPage() {
               {!waConnected && (
                 <Link href="/groups/connect"
                   className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#25d366] px-4 py-2 text-[13px] font-medium text-white">
+                  <WhatsAppIcon className="h-3.5 w-3.5" />
                   Connect WhatsApp
                 </Link>
               )}
@@ -300,7 +480,10 @@ export default function GroupHubPage() {
           {polls.length === 0 ? (
             <div className="rounded-2xl border border-outline-variant/50 py-8 text-center">
               <p className="text-[32px]">📊</p>
-              <p className="mt-2 text-[14px] text-on-surface-variant">No polls yet</p>
+              <p className="mt-2 text-[14px] font-medium text-on-surface">No polls yet</p>
+              <p className="mt-0.5 text-[12px] text-on-surface-variant">
+                {canPoll ? "Create your first poll above." : "Connect WhatsApp to start polling."}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -332,34 +515,155 @@ export default function GroupHubPage() {
                 );
               })}
               <Link href={`/groups/${group.id}/plan`}
-                className="block py-2 text-center text-[13px] font-medium text-primary hover:bg-primary/8 rounded-xl">
+                className="block rounded-xl py-2 text-center text-[13px] font-medium text-primary hover:bg-primary/8">
                 View all polls →
               </Link>
             </div>
           )}
         </section>
 
-        {/* ── Chat section ─────────────────────────────── */}
+        {/* ── Places Grid ──────────────────────────────── */}
         <section>
-          <h2 className="mb-3 text-[16px] font-medium text-on-surface">Chat</h2>
-          <Link
-            href={`/groups/${group.id}/chat`}
-            className="flex items-center gap-4 rounded-2xl bg-surface-container px-4 py-4 transition active:bg-surface-high"
-          >
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/12 text-2xl">
-              💬
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[16px] font-medium text-on-surface">Saved Places</h2>
+            <Link
+              href={`/groups/${group.id}/plan-places`}
+              className="rounded-full px-3 py-1 text-[13px] font-medium text-primary hover:bg-primary/8"
+            >
+              {places.length > 0 ? "Manage" : "Add places"}
+            </Link>
+          </div>
+
+          {places.length === 0 ? (
+            <div className="rounded-2xl border border-outline-variant/50 py-8 text-center">
+              <p className="text-[32px]">📍</p>
+              <p className="mt-2 text-[14px] font-medium text-on-surface">No places saved yet</p>
+              <p className="mt-0.5 text-[12px] text-on-surface-variant">Add spots your group loves to visit</p>
+              <Link
+                href={`/groups/${group.id}/plan-places`}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[13px] font-medium text-on-primary"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add places
+              </Link>
             </div>
-            <div className="flex-1">
-              <p className="text-[15px] font-medium text-on-surface">Group Chat</p>
-              <p className="text-[12px] text-on-surface-variant">
-                {waJid && waConnected ? "Bridged to WhatsApp" : "Decide together"}
-              </p>
+          ) : (
+            (() => {
+              const byCat: Record<string, PlaceRow[]> = {};
+              places.forEach(p => {
+                if (!byCat[p.category]) byCat[p.category] = [];
+                byCat[p.category].push(p);
+              });
+              return (
+                <div className="space-y-4">
+                  {Object.entries(byCat).map(([cat, catPlaces]) => (
+                    <div key={cat}>
+                      <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                        <span>{catEmoji(cat)}</span>{cat}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {catPlaces.map(place => (
+                          <PlaceCard key={place.id} place={place} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <Link
+                    href={`/groups/${group.id}/plan-places`}
+                    className="block rounded-xl py-2 text-center text-[13px] font-medium text-primary hover:bg-primary/8"
+                  >
+                    Manage places →
+                  </Link>
+                </div>
+              );
+            })()
+          )}
+        </section>
+
+        {/* ── WhatsApp section ─────────────────────────── */}
+        {waJid && (
+          <section>
+            <h2 className="mb-3 text-[16px] font-medium text-on-surface">WhatsApp</h2>
+            <Link
+              href={`/groups/${group.id}/whatsapp`}
+              className="flex items-center gap-4 rounded-2xl bg-[#25d366]/8 px-4 py-4 transition active:bg-[#25d366]/14"
+            >
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#25d366]/15">
+                <WhatsAppIcon className="h-6 w-6 text-[#25d366]" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[15px] font-medium text-on-surface">WhatsApp Group</p>
+                <p className="text-[12px] text-[#128c7e]">Live chat · Poll results</p>
+              </div>
+              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-on-surface-variant/40">
+                <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+              </svg>
+            </Link>
+          </section>
+        )}
+
+        {/* ── Events section ────────────────────────────── */}
+        <section>
+          <h2 className="mb-3 text-[16px] font-medium text-on-surface">Upcoming Events</h2>
+          {events.length === 0 ? (
+            <div className="rounded-2xl border border-outline-variant/50 py-8 text-center">
+              <p className="text-[32px]">🎉</p>
+              <p className="mt-2 text-[14px] font-medium text-on-surface">No events yet</p>
+              <p className="mt-0.5 text-[12px] text-on-surface-variant">Use AI Plan to pick a place and create an event</p>
             </div>
-            {/* M3 trailing chevron */}
-            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-on-surface-variant/40">
-              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
-            </svg>
-          </Link>
+          ) : (
+            <div className="space-y-3">
+              {events.map((e) => {
+                const confirming = confirmDeleteEventId === e.id;
+                return (
+                  <div key={e.id} className={`rounded-2xl px-4 py-4 ${e.source_poll_id ? "bg-gradient-to-br from-primary/6 to-violet-500/5 ring-1 ring-primary/15" : "bg-surface-container"}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-on-surface">{e.title}</p>
+                      </div>
+                      {e.source_poll_id && !confirming && (
+                        <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                          ✨ AI Pick
+                        </span>
+                      )}
+                      {confirming ? (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            onClick={() => deleteEvent(e.id)}
+                            className="rounded-full bg-red-500 px-3 py-1 text-[11px] font-semibold text-white"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteEventId(null)}
+                            className="rounded-full bg-on-surface/8 px-3 py-1 text-[11px] font-medium text-on-surface-variant"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteEventId(e.id)}
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-on-surface-variant/40 hover:bg-on-surface/8 hover:text-on-surface-variant"
+                        >
+                          <XIcon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {e.place_name && <p className="mt-1 text-[12px] text-on-surface-variant">📍 {e.place_name}</p>}
+                    {(e.event_date || e.event_time) ? (
+                      <p className="mt-0.5 text-[12px] text-on-surface-variant">
+                        🗓️ {[e.event_date, e.event_time].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-[11px] text-on-surface-variant/60">🗓️ Date TBD</p>
+                    )}
+                    {e.sent_at && <p className="mt-1 text-[11px] font-medium text-[#128c7e]">✓ Sent to WhatsApp</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* ── Members section ───────────────────────────── */}
@@ -375,11 +679,16 @@ export default function GroupHubPage() {
           </div>
 
           {group.members.length === 0 ? (
-            <p className="rounded-2xl bg-surface-container py-6 text-center text-[13px] text-on-surface-variant">
-              No members yet. Tap Manage to add friends.
-            </p>
+            <div className="rounded-2xl bg-surface-container py-8 text-center">
+              <p className="text-[32px]">👥</p>
+              <p className="mt-2 text-[14px] text-on-surface-variant">No members yet.</p>
+              <Link href={`/groups/${group.id}/edit`}
+                className="mt-3 inline-flex items-center gap-1 rounded-full bg-primary px-5 py-2 text-[13px] font-medium text-on-primary">
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add members
+              </Link>
+            </div>
           ) : (
-            /* M3 horizontal scrollable member list */
             <div className="flex gap-4 overflow-x-auto pb-2">
               {group.members.map((m) => {
                 const { gradient, initials } = avatarFor(m);
@@ -402,9 +711,10 @@ export default function GroupHubPage() {
             </div>
           )}
         </section>
+
       </div>
 
-      {showPollSheet && waJid && (
+      {showPollSheet && (
         <QuickPollSheet
           groupId={group.id}
           userId={userId}

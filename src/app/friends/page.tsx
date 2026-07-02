@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import { ArrowLeftIcon, SearchIcon, UserPlusIcon, CheckIcon, XIcon } from "@/components/icons";
@@ -12,6 +13,7 @@ type Profile = { id: string; username: string | null; name: string };
 type FriendRow = { user_id: string; friend_id: string; status: string; other: Profile };
 
 export default function FriendsPage() {
+  const router = useRouter();
   const session = useSession();
   const { profile } = useProfile();
   const uid = session?.user?.id ?? null;
@@ -139,9 +141,9 @@ export default function FriendsPage() {
   return (
     <div className="pb-24">
       <header className="sticky top-0 z-20 grid grid-cols-[2.5rem_1fr_2.5rem] items-center bg-surface/80 px-4 py-3.5 backdrop-blur-md">
-        <Link href="/community" aria-label="Back" className="grid h-10 w-10 place-items-center text-primary">
+        <button onClick={() => router.back()} aria-label="Back" className="grid h-10 w-10 place-items-center text-primary">
           <ArrowLeftIcon />
-        </Link>
+        </button>
         <h1 className="text-center text-lg font-bold text-primary">Find Friends</h1>
         <span />
       </header>
