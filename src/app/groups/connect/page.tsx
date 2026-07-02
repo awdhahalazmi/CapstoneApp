@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+// useCallback kept for stopPoll memoization
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeftIcon } from "@/components/icons";
@@ -13,7 +14,6 @@ export default function ConnectWhatsAppPage() {
   const { profile } = useProfile();
   const [phase, setPhase] = useState<Phase>("loading");
   const [qrImage, setQrImage] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedRef = useRef(false);
 
@@ -21,74 +21,29 @@ export default function ConnectWhatsAppPage() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
-  const startStatusPoll = useCallback((userId: string) => {
-    stopPoll();
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/whatsapp/status?userId=${userId}`);
-        const { status } = await res.json();
-        if (status === "connected") {
-          stopPoll();
-          esRef.current?.close();
-          setPhase("connected");
-          setTimeout(() => router.push("/groups/select"), 1200);
-        }
-      } catch { /* ignore */ }
-    }, 2_000);
-  }, [router, stopPoll]);
-
   useEffect(() => {
     if (!profile?.id || startedRef.current) return;
     startedRef.current = true;
-
     const userId = profile.id;
 
-    async function init() {
-      // Check if already connected (auto-reconnect may have finished)
+    // Poll /api/whatsapp/qr-image every 2s — works through Vercel→Railway rewrite
+    pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/whatsapp/status?userId=${userId}`);
-        const { status } = await res.json();
-        if (status === "connected") {
-          setPhase("connected");
-          setTimeout(() => router.push("/groups/select"), 800);
-          return;
-        }
-      } catch { /* fall through to QR */ }
-
-      // Open QR SSE stream
-      const es = new EventSource(`/api/whatsapp/qr?userId=${userId}`);
-      esRef.current = es;
-
-      // Polling as fallback — catches connection even if SSE event is missed
-      startStatusPoll(userId);
-
-      es.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "qr") {
+        const res = await fetch(`/api/whatsapp/qr-image?userId=${userId}`);
+        const data = await res.json() as { type: string; image?: string };
+        if (data.type === "qr" && data.image) {
           setQrImage(data.image);
           setPhase("qr");
         } else if (data.type === "connected") {
           stopPoll();
-          es.close();
           setPhase("connected");
           setTimeout(() => router.push("/groups/select"), 1200);
-        } else if (data.type === "timeout") {
-          stopPoll();
-          es.close();
-          setPhase("timeout");
         }
-      };
+      } catch { /* ignore transient errors */ }
+    }, 2_000);
 
-      es.onerror = () => { /* polling handles it */ };
-    }
-
-    init();
-
-    return () => {
-      esRef.current?.close();
-      stopPoll();
-    };
-  }, [profile?.id, router, startStatusPoll, stopPoll]);
+    return () => stopPoll();
+  }, [profile?.id, router, stopPoll]);
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-surface">
